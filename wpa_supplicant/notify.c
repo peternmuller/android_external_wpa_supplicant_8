@@ -24,7 +24,7 @@
 #include "p2p_supplicant.h"
 #include "sme.h"
 #include "notify.h"
-#include "aidl.h"
+#include "aidl/aidl.h"
 
 int wpas_notify_supplicant_initialized(struct wpa_global *global)
 {
@@ -797,7 +797,7 @@ void wpas_notify_p2p_group_started(struct wpa_supplicant *wpa_s,
 
 	wpas_dbus_signal_p2p_group_started(wpa_s, client, persistent, ip);
 
-	wpas_aidl_notify_p2p_group_started(wpa_s, ssid, persistent, client);
+	wpas_aidl_notify_p2p_group_started(wpa_s, ssid, persistent, client, ip);
 }
 
 
