@@ -773,6 +773,7 @@ int AidlManager::notifyNetworkRequest(
 	return 1;
 }
 
+#ifdef CONFIG_INTERWORKING
 /**
  * Notify that the AT_PERMANENT_ID_REQ is denied from eap_peer when the strict
  * conservative peer mode is enabled.
@@ -843,6 +844,7 @@ void AidlManager::notifyAnqpQueryDone(
 			}
 		}
 
+#ifdef CONFIG_HS20
 		aidl_hs20_anqp_data.operatorFriendlyName =
 			misc_utils::convertWpaBufToVector(
 			anqp->hs20_operator_friendly_name);
@@ -854,6 +856,16 @@ void AidlManager::notifyAnqpQueryDone(
 		aidl_hs20_anqp_data.osuProvidersList =
 			misc_utils::convertWpaBufToVector(
 			anqp->hs20_osu_providers_list);
+#else
+		aidl_hs20_anqp_data.operatorFriendlyName =
+			misc_utils::convertWpaBufToVector(NULL);
+		aidl_hs20_anqp_data.wanMetrics =
+			misc_utils::convertWpaBufToVector(NULL);
+		aidl_hs20_anqp_data.connectionCapability =
+			misc_utils::convertWpaBufToVector(NULL);
+		aidl_hs20_anqp_data.osuProvidersList =
+			misc_utils::convertWpaBufToVector(NULL);
+#endif /* CONFIG_HS20 */
 	}
 
 	callWithEachStaIfaceCallback(
@@ -862,6 +874,7 @@ void AidlManager::notifyAnqpQueryDone(
 				   std::placeholders::_1, macAddrToVec(bssid), aidl_anqp_data,
 				   aidl_hs20_anqp_data));
 }
+#endif /* CONFIG_INTERWORKING */
 
 /**
  * Notify all listeners about the end of an HS20 icon query.
@@ -2603,6 +2616,41 @@ ssize_t AidlManager::getCertificate(const char* alias, uint8_t** value) {
 		if (*value == nullptr) return -1;
 		os_memcpy(*value, cert->data(), cert->size());
 		return cert->size();
+	}
+	return -1;
+}
+
+ssize_t AidlManager::listAliases(const char *prefix, char ***aliases) {
+	if (prefix == nullptr || aliases == nullptr) {
+		wpa_printf(MSG_ERROR, "Null pointer argument was passed to listAliases");
+		return -1;
+	}
+
+	if (auto results =
+			certificate_utils::listAliases(prefix, non_standard_cert_callback_)) {
+		int count = results->size();
+		*aliases = (char **) os_malloc(sizeof(char *) * count);
+		if (*aliases == nullptr) {
+			wpa_printf(MSG_ERROR, "listAliases: os_malloc alias array error");
+			return -1;
+		}
+		os_memset(*aliases, 0, sizeof(char *) * count);
+
+		int index = 0;
+		for (auto it = results->begin(); it != results->end(); ++it) {
+			int alias_len = it->length();
+			char *alias = (char *) os_malloc(alias_len + 1);
+			if (alias == nullptr) {
+				wpa_printf(MSG_ERROR, "listAliases: os_malloc alias string error");
+				for (int i = 0; i < index; ++i) os_free((*aliases)[i]);
+				os_free(*aliases);
+				return -1;
+			}
+			os_memcpy(alias, it->data(), alias_len + 1);
+			(*aliases)[index] = alias;
+			index++;
+		}
+		return count;
 	}
 	return -1;
 }
