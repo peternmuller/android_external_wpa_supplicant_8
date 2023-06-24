@@ -1420,12 +1420,16 @@ ndk::ScopedAStatus StaNetwork::setIdStrInternal(const std::string &id_str)
 
 ndk::ScopedAStatus StaNetwork::setUpdateIdentifierInternal(uint32_t id)
 {
+#ifdef CONFIG_HS20
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
 	wpa_ssid->update_identifier = id;
 	wpa_printf(
 		MSG_MSGDUMP, "update_identifier: %d", wpa_ssid->update_identifier);
 	resetInternalStateAfterParamsUpdate();
 	return ndk::ScopedAStatus::ok();
+#else
+	return createStatusWithMsg(SupplicantStatusCode::FAILURE_UNKNOWN, "Not implemented");
+#endif /* CONFIG_HS20 */
 }
 
 ndk::ScopedAStatus StaNetwork::setWapiCertSuiteInternal(const std::string &suite)
@@ -2306,6 +2310,7 @@ StaNetwork::getPairwiseCipherInternal()
 ndk::ScopedAStatus StaNetwork::setRoamingConsortiumSelectionInternal(
 	const std::vector<uint8_t> &selectedRcoi)
 {
+#ifdef CONFIG_HS20
 	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
 	if (wpa_ssid == NULL) {
 		return createStatus(SupplicantStatusCode::FAILURE_NETWORK_INVALID);
@@ -2321,6 +2326,9 @@ ndk::ScopedAStatus StaNetwork::setRoamingConsortiumSelectionInternal(
 
 	resetInternalStateAfterParamsUpdate();
 	return ndk::ScopedAStatus::ok();
+#else
+	return createStatusWithMsg(SupplicantStatusCode::FAILURE_UNKNOWN, "Not implemented");
+#endif /* CONFIG_HS20 */
 }
 
 /**
