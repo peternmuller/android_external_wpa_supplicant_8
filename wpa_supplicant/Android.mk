@@ -1974,7 +1974,6 @@ LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_MODULE := wpa_supplicant
 
 ifeq ($(WPA_SUPPLICANT_USE_AIDL), y)
-LOCAL_SHARED_LIBRARIES += android.hardware.wifi-V2-ndk
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant-V3-ndk
 LOCAL_SHARED_LIBRARIES += android.system.keystore2-V1-ndk
 LOCAL_SHARED_LIBRARIES += libutils libbase
@@ -2090,7 +2089,6 @@ LOCAL_SRC_FILES += \
 endif
 
 LOCAL_SHARED_LIBRARIES := \
-    android.hardware.wifi-V2-ndk \
     android.hardware.wifi.supplicant-V3-ndk \
     android.system.keystore2-V1-ndk \
     libbinder_ndk \
