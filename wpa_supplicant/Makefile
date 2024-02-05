@@ -112,6 +112,7 @@ OBJS += ../src/utils/bitfield.o
 OBJS += ../src/utils/ip_addr.o
 OBJS += ../src/utils/crc32.o
 OBJS += ../src/common/ptksa_cache.o
+OBJS += ../src/rsn_supp/pmksa_cache.o
 OBJS += op_classes.o
 OBJS += rrm.o
 OBJS += twt.o
@@ -372,7 +373,6 @@ endif
 ifndef CONFIG_NO_WPA
 OBJS += ../src/rsn_supp/wpa.o
 OBJS += ../src/rsn_supp/preauth.o
-OBJS += ../src/rsn_supp/pmksa_cache.o
 OBJS += ../src/rsn_supp/wpa_ie.o
 OBJS += ../src/common/wpa_common.o
 NEED_AES=y
@@ -2192,9 +2192,9 @@ LIBPASNSO += ../src/common/dragonfly.c
 endif
 
 LIBPASNSO += ../src/common/ptksa_cache.c
+LIBPASNSO += ../src/rsn_supp/pmksa_cache.c
 
 ifndef CONFIG_NO_WPA
-LIBPASNSO += ../src/rsn_supp/pmksa_cache.c
 LIBPASNSO += ../src/rsn_supp/wpa_ie.c
 endif
 
