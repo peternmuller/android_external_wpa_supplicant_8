@@ -41,7 +41,8 @@ using aidl::android::hardware::wifi::supplicant::SupplicantStatusCode;
 using aidl::android::hardware::wifi::supplicant::WifiTechnology;
 using aidl::android::hardware::wifi::supplicant::misc_utils::createStatus;
 
-// TODO (b/204810426): Import from wifi vendor AIDL interface when it exists
+// Enum definition copied from the Vendor HAL interface.
+// See android.hardware.wifi.WifiChannelWidthInMhz
 enum WifiChannelWidthInMhz {
   WIDTH_20	= 0,
   WIDTH_40	= 1,
@@ -1880,6 +1881,7 @@ StaIface::getConnectionCapabilitiesInternal()
 		}
 		capa.maxNumberRxSpatialStreams = wpa_s->connection_max_nss_rx;
 		capa.maxNumberTxSpatialStreams = wpa_s->connection_max_nss_tx;
+		capa.apTidToLinkMapNegotiationSupported = wpa_s->ap_t2lm_negotiation_support;
 	} else {
 		capa.technology = WifiTechnology::UNKNOWN;
 		capa.channelBandwidth = WifiChannelWidthInMhz::WIDTH_20;
@@ -2440,11 +2442,11 @@ StaIface::removeQosPolicyForScsInternal(const std::vector<uint8_t>& scsPolicyIds
 }
 
 ::ndk::ScopedAStatus StaIface::configureMscsInternal(const MscsParams& params) {
-	return createStatus(SupplicantStatusCode::FAILURE_UNSUPPORTED);
+	return ndk::ScopedAStatus::ok();
 }
 
 ::ndk::ScopedAStatus StaIface::disableMscsInternal() {
-	return createStatus(SupplicantStatusCode::FAILURE_UNSUPPORTED);
+	return ndk::ScopedAStatus::ok();
 }
 
 /**
