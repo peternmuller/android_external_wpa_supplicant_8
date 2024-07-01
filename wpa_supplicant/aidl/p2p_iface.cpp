@@ -1182,7 +1182,7 @@ ndk::ScopedAStatus P2pIface::reinvokeInternal(
 	}
 	if (wpas_p2p_invite(
 		wpa_s, peer_address.data(), ssid, NULL, 0, 0, ht40, vht,
-		CONF_OPER_CHWIDTH_USE_HT, 0, he, edmg, is6GhzAllowed(wpa_s))) {
+		CONF_OPER_CHWIDTH_USE_HT, 0, he, edmg, is6GhzAllowed(wpa_s), 0)) {
 		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
 	}
 	return ndk::ScopedAStatus::ok();
