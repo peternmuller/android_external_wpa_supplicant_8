@@ -7187,6 +7187,7 @@ static int p2p_ctrl_group_add_persistent(struct wpa_supplicant *wpa_s,
 static int p2p_ctrl_group_add(struct wpa_supplicant *wpa_s, char *cmd)
 {
 	int freq = 0, persistent = 0, group_id = -1;
+	bool p2p2 = false;
 	bool allow_6ghz = false;
 	int vht = wpa_s->conf->p2p_go_vht;
 	int ht40 = wpa_s->conf->p2p_go_ht40 || vht;
@@ -7223,6 +7224,8 @@ static int p2p_ctrl_group_add(struct wpa_supplicant *wpa_s, char *cmd)
 			persistent = 1;
 		} else if (os_strcmp(token, "allow_6ghz") == 0) {
 			allow_6ghz = true;
+		} else if (os_strcmp(token, "p2p2") == 0) {
+			p2p2 = true;
 		} else if (os_strncmp(token, "go_bssid=", 9) == 0) {
 			if (hwaddr_aton(token + 9, go_bssid_buf))
 				return -1;
@@ -7274,7 +7277,7 @@ static int p2p_ctrl_group_add(struct wpa_supplicant *wpa_s, char *cmd)
 						     go_bssid);
 
 	return wpas_p2p_group_add(wpa_s, persistent, freq, freq2, ht40, vht,
-				  max_oper_chwidth, he, edmg, allow_6ghz);
+				  max_oper_chwidth, he, edmg, allow_6ghz, p2p2);
 }
 
 

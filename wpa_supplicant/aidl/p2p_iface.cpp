@@ -1646,7 +1646,8 @@ ndk::ScopedAStatus P2pIface::addGroupInternal(
 	if (ssid == NULL) {
 		if (wpas_p2p_group_add(
 			wpa_s, persistent, 0, 0, ht40, vht,
-			CONF_OPER_CHWIDTH_USE_HT, he, edmg, is6GhzAllowed(wpa_s))) {
+			CONF_OPER_CHWIDTH_USE_HT, he, edmg, is6GhzAllowed(wpa_s),
+			wpa_s->p2p2)) {
 			return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
 		} else {
 			return ndk::ScopedAStatus::ok();
@@ -1706,7 +1707,8 @@ ndk::ScopedAStatus P2pIface::addGroupWithConfigInternal(
 
 		if (wpas_p2p_group_add(
 			wpa_s, persistent, freq, 0, ht40, vht,
-			CONF_OPER_CHWIDTH_USE_HT, he, edmg, is6GhzAllowed(wpa_s))) {
+			CONF_OPER_CHWIDTH_USE_HT, he, edmg, is6GhzAllowed(wpa_s),
+			wpa_s->p2p2)) {
 			return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
 		}
 		return ndk::ScopedAStatus::ok();
