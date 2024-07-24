@@ -9278,6 +9278,46 @@ static void wpa_driver_nl80211_send_action_cancel_wait(void *priv)
 }
 
 
+static int nl80211_put_any_link_id(struct nl_msg *msg,
+			       struct driver_sta_mlo_info *mlo,
+			       int freq)
+{
+	int i;
+	int link_id = -1;
+	int any_valid_link_id = -1;
+
+	if (!mlo->valid_links)
+		return 0;
+
+	/* First try to pick a link that uses the same band */
+	for (i = 0; i < MAX_NUM_MLD_LINKS; i++) {
+		if (!(mlo->valid_links & BIT(i)))
+			continue;
+
+		if (any_valid_link_id == -1)
+			any_valid_link_id = i;
+
+		if (is_same_band(freq, mlo->links[i].freq)) {
+			link_id = i;
+			break;
+		}
+	}
+
+	/* Use any valid link ID if no band match was found */
+	if (link_id == -1)
+		link_id = any_valid_link_id;
+
+	if (link_id == -1) {
+		wpa_printf(MSG_INFO,
+			   "nl80211: No valid Link ID found for freq %u", freq);
+		return 0;
+	}
+
+	wpa_printf(MSG_DEBUG, "nl80211: Add Link ID %d", link_id);
+	return nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id);
+}
+
+
 static int wpa_driver_nl80211_remain_on_channel(void *priv, unsigned int freq,
 						unsigned int duration)
 {
@@ -9289,7 +9329,8 @@ static int wpa_driver_nl80211_remain_on_channel(void *priv, unsigned int freq,
 
 	if (!(msg = nl80211_cmd_msg(bss, 0, NL80211_CMD_REMAIN_ON_CHANNEL)) ||
 	    nla_put_u32(msg, NL80211_ATTR_WIPHY_FREQ, freq) ||
-	    nla_put_u32(msg, NL80211_ATTR_DURATION, duration)) {
+	    nla_put_u32(msg, NL80211_ATTR_DURATION, duration) ||
+	    nl80211_put_any_link_id(msg, &drv->sta_mlo_info, freq)) {
 		nlmsg_free(msg);
 		return -1;
 	}
@@ -10518,11 +10559,16 @@ static int nl80211_send_tdls_mgmt(void *priv, const u8 *dst, u8 action_code,
 	    nl80211_tdls_set_discovery_resp_link(drv, link_id) < 0)
 		return -EOPNOTSUPP;
 
+	if (link_id < 0 && drv->sta_mlo_info.valid_links)
+		link_id = drv->sta_mlo_info.assoc_link_id;
+
 	if (!(msg = nl80211_drv_msg(drv, 0, NL80211_CMD_TDLS_MGMT)) ||
 	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, dst) ||
 	    nla_put_u8(msg, NL80211_ATTR_TDLS_ACTION, action_code) ||
 	    nla_put_u8(msg, NL80211_ATTR_TDLS_DIALOG_TOKEN, dialog_token) ||
 	    nla_put_u16(msg, NL80211_ATTR_STATUS_CODE, status_code) ||
+	    (link_id >= 0 &&
+	     nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id)) ||
 	    nl80211_add_peer_capab(msg, peer_capab) ||
 	    (initiator && nla_put_flag(msg, NL80211_ATTR_TDLS_INITIATOR)) ||
 	    nla_put(msg, NL80211_ATTR_IE, len, buf))

@@ -2429,6 +2429,7 @@ void wpa_s_setup_sae_pt(struct wpa_config *conf, struct wpa_ssid *ssid,
 		password = ssid->passphrase;
 
 	if (!password ||
+	    !wpa_key_mgmt_sae(ssid->key_mgmt) ||
 	    (conf->sae_pwe == SAE_PWE_HUNT_AND_PECK && !ssid->sae_password_id &&
 	     !wpa_key_mgmt_sae_ext_key(ssid->key_mgmt) &&
 	     !force &&
@@ -8734,9 +8735,16 @@ bool wpas_is_sae_avoided(struct wpa_supplicant *wpa_s,
 int pmf_in_use(struct wpa_supplicant *wpa_s, const u8 *addr)
 {
 	if (wpa_s->current_ssid == NULL ||
-	    wpa_s->wpa_state < WPA_4WAY_HANDSHAKE ||
-	    os_memcmp(addr, wpa_s->bssid, ETH_ALEN) != 0)
+	    wpa_s->wpa_state < WPA_4WAY_HANDSHAKE)
 		return 0;
+	if (wpa_s->valid_links) {
+		if (os_memcmp(addr, wpa_s->ap_mld_addr, ETH_ALEN) != 0 &&
+		    !wpas_ap_link_address(wpa_s, addr))
+			return 0;
+	} else {
+		if (os_memcmp(addr, wpa_s->bssid, ETH_ALEN) != 0)
+			return 0;
+	}
 	return wpa_sm_pmf_enabled(wpa_s->wpa);
 }
 
@@ -9425,7 +9433,7 @@ wpa_drv_get_scan_results(struct wpa_supplicant *wpa_s, const u8 *bssid)
 }
 
 
-static bool wpas_ap_link_address(struct wpa_supplicant *wpa_s, const u8 *addr)
+bool wpas_ap_link_address(struct wpa_supplicant *wpa_s, const u8 *addr)
 {
 	int i;
 
