@@ -1844,6 +1844,10 @@ int p2p_go_params(struct p2p_data *p2p, struct p2p_go_neg_results *params)
 	}
 	p2p->ssid_set = 0;
 
+	params->cipher = WPA_CIPHER_CCMP;
+	if (p2p->cfg->pairing_config.pasn_type & 0xc)
+		params->cipher |= WPA_CIPHER_GCMP_256;
+
 	if (p2p->passphrase_set) {
 		os_memcpy(params->passphrase, p2p->passphrase, os_strlen(p2p->passphrase));
 	} else {
@@ -1920,6 +1924,7 @@ void p2p_go_complete(struct p2p_data *p2p, struct p2p_device *peer)
 	if (peer->p2p2 && peer->pasn) {
 		res.p2p2 = peer->p2p2;
 		res.akmp = peer->pasn->akmp;
+		res.cipher = peer->pasn->cipher;
 
 		if (res.akmp == WPA_KEY_MGMT_PASN) {
 			if (go) {
