@@ -1600,6 +1600,9 @@ struct wpa_supplicant {
 	struct wpa_radio_work *pasn_auth_work;
 	unsigned int pasn_count;
 	struct pasn_auth *pasn_params;
+#ifdef CONFIG_P2P
+	struct wpa_radio_work *p2p_pasn_auth_work;
+#endif /* CONFIG_P2P */
 #endif /* CONFIG_PASN */
 	struct scs_robust_av_data scs_robust_av_req;
 	u8 scs_dialog_token;
