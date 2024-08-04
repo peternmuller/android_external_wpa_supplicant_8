@@ -1917,6 +1917,11 @@ struct p2p_group;
  */
 struct p2p_group_config {
 	/**
+	 * p2p2 - Whether the group was formed using P2P2
+	 */
+	bool p2p2;
+
+	/**
 	 * persistent_group - Whether the group is persistent
 	 * 0 = not a persistent group
 	 * 1 = persistent group without persistent reconnect
