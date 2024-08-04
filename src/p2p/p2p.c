@@ -6142,6 +6142,11 @@ void p2p_pasn_initialize(struct p2p_data *p2p, struct p2p_device *dev,
 	else
 		pasn->pmksa = p2p->responder_pmksa;
 
+	pasn->cb_ctx = p2p->cfg->cb_ctx;
+	pasn->send_mgmt = p2p->cfg->pasn_send_mgmt;
+	pasn->prepare_data_element = p2p->cfg->prepare_data_element;
+	pasn->parse_data_element = p2p->cfg->parse_data_element;
+
 	pasn->freq = freq;
 }
 
@@ -6685,6 +6690,8 @@ int p2p_pasn_auth_rx(struct p2p_data *p2p, const struct ieee80211_mgmt *mgmt,
 	wpabuf_free(pasn->frame);
 	pasn->frame = NULL;
 
+	pasn_register_callbacks(pasn, p2p->cfg->cb_ctx,
+				p2p->cfg->pasn_send_mgmt, NULL);
 	auth_transaction = le_to_host16(mgmt->u.auth.auth_transaction);
 
 	if (dev->role == P2P_ROLE_PAIRING_INITIATOR && auth_transaction == 2) {
