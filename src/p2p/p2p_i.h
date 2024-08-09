@@ -1077,7 +1077,8 @@ void p2p_pref_channel_filter(const struct p2p_channels *a,
 			     unsigned int num_channels,
 			     struct p2p_channels *res, bool go);
 void p2p_pasn_initialize(struct p2p_data *p2p, struct p2p_device *dev,
-			 const u8 *addr, int freq, bool verify);
+			 const u8 *addr, int freq, bool verify,
+			 bool derive_kek);
 void p2p_dbg(struct p2p_data *p2p, const char *fmt, ...)
 PRINTF_FORMAT(2, 3);
 void p2p_info(struct p2p_data *p2p, const char *fmt, ...)
