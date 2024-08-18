@@ -1961,6 +1961,9 @@ enum qca_wlan_vendor_acs_hw_mode {
  *	that the device supports enhanced audio experience over WLAN feature.
  * @QCA_WLAN_VENDOR_FEATURE_HT_VHT_TWT_RESPONDER: Flag indicates that the device
  *	in AP mode supports TWT responder mode in HT and VHT modes.
+ * @QCA_WLAN_VENDOR_FEATURE_NAN_USD_OFFLOAD: Flag indicates that the driver
+ *	supports Unsynchronized Service Discovery to be offloaded to it.
+ *
  * @NUM_QCA_WLAN_VENDOR_FEATURES: Number of assigned feature bits
  */
 enum qca_wlan_vendor_features {
@@ -1989,6 +1992,7 @@ enum qca_wlan_vendor_features {
 	QCA_WLAN_VENDOR_FEATURE_AP_ALLOWED_FREQ_LIST = 22,
 	QCA_WLAN_VENDOR_FEATURE_ENHANCED_AUDIO_EXPERIENCE_OVER_WLAN = 23,
 	QCA_WLAN_VENDOR_FEATURE_HT_VHT_TWT_RESPONDER = 24,
+	QCA_WLAN_VENDOR_FEATURE_NAN_USD_OFFLOAD = 26,
 	NUM_QCA_WLAN_VENDOR_FEATURES /* keep last */
 };
 
