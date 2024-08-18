@@ -3064,6 +3064,13 @@ bool is_p2p_dfs_chan_enabled(struct p2p_data *p2p)
 }
 
 
+void p2p_set_dev_addr(struct p2p_data *p2p, const u8 *addr)
+{
+	if (p2p && addr)
+		os_memcpy(p2p->cfg->dev_addr, addr, ETH_ALEN);
+}
+
+
 static void p2p_pairing_info_deinit(struct p2p_data *p2p)
 {
 #ifdef CONFIG_PASN
