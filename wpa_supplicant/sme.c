@@ -1661,14 +1661,21 @@ static int sme_sae_is_group_enabled(struct wpa_supplicant *wpa_s, int group)
 static int sme_check_sae_rejected_groups(struct wpa_supplicant *wpa_s,
 					 const struct wpabuf *groups)
 {
-	size_t i, count;
+	size_t i, count, len;
 	const u8 *pos;
 
 	if (!groups)
 		return 0;
 
 	pos = wpabuf_head(groups);
-	count = wpabuf_len(groups) / 2;
+	len = wpabuf_len(groups);
+	if (len & 1) {
+		wpa_printf(MSG_DEBUG,
+			   "SAE: Invalid length of the Rejected Groups element payload: %zu",
+			   len);
+		return 1;
+	}
+	count = len / 2;
 	for (i = 0; i < count; i++) {
 		int enabled;
 		u16 group;
@@ -1965,6 +1972,7 @@ static int sme_sae_auth(struct wpa_supplicant *wpa_s, u16 auth_transaction,
 
 		wpa_s->sme.sae.state = SAE_ACCEPTED;
 		sae_clear_temp_data(&wpa_s->sme.sae);
+		wpa_s_clear_sae_rejected(wpa_s);
 
 		if (external) {
 			/* Report success to driver */
@@ -2106,6 +2114,12 @@ void sme_event_auth(struct wpa_supplicant *wpa_s, union wpa_event_data *data)
 			wpas_connection_failed(wpa_s, wpa_s->pending_bssid);
 			wpa_supplicant_set_state(wpa_s, WPA_DISCONNECTED);
 
+			if (wpa_s->sme.sae_rejected_groups &&
+			    ssid->disabled_until.sec) {
+				wpa_printf(MSG_DEBUG,
+					   "SME: Clear SAE state with rejected groups due to continuous failures");
+				wpa_s_clear_sae_rejected(wpa_s);
+			}
 		}
 		if (res != 1)
 			return;
