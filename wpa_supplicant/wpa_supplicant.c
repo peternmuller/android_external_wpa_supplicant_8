@@ -2217,6 +2217,8 @@ static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx,
 		if (!wpa_s->disable_fils)
 			*pos |= 0x01;
 #endif /* CONFIG_FILS */
+		if (wpa_s->conf->twt_requester)
+			*pos |= 0x20; /* Bit 77 - TWT Requester Support */
 		break;
 	case 10: /* Bits 80-87 */
 #ifdef CONFIG_TESTING_OPTIONS
