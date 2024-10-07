@@ -324,6 +324,12 @@ CFLAGS += -DCONFIG_DPP3
 endif
 endif
 
+ifdef CONFIG_NAN_USD
+OBJS += ../src/common/nan_de.o
+OBJS += nan_usd.o
+CFLAGS += -DCONFIG_NAN_USD
+endif
+
 ifdef CONFIG_OWE
 CFLAGS += -DCONFIG_OWE
 NEED_ECC=y
@@ -1048,6 +1054,9 @@ ifdef CONFIG_DPP
 OBJS += ../src/ap/dpp_hostapd.o
 OBJS += ../src/ap/gas_query_ap.o
 NEED_AP_GAS_SERV=y
+endif
+ifdef CONFIG_NAN_USD
+OBJS += ../src/ap/nan_usd_ap.o
 endif
 ifdef CONFIG_INTERWORKING
 NEED_AP_GAS_SERV=y

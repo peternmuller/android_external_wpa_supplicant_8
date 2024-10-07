@@ -1141,6 +1141,7 @@ struct wpa_supplicant {
 	int pending_pd_before_join;
 	u8 pending_join_iface_addr[ETH_ALEN];
 	u8 pending_join_dev_addr[ETH_ALEN];
+	u8 p2p_bootstrap_dev_addr[ETH_ALEN];
 	int pending_join_wps_method;
 	u8 p2p_join_ssid[SSID_MAX_LEN];
 	size_t p2p_join_ssid_len;
@@ -1195,6 +1196,8 @@ struct wpa_supplicant {
 	unsigned int p2ps_method_config_any:1;
 	unsigned int p2p_cli_probe:1;
 	unsigned int p2p_go_allow_dfs:1;
+	unsigned int p2p2:1;
+	u16 p2p_bootstrap;
 	enum hostapd_hw_mode p2p_go_acs_band;
 	int p2p_persistent_go_freq;
 	int p2p_persistent_id;
@@ -1627,6 +1630,12 @@ struct wpa_supplicant {
 	 * owe_transition_search == 1 */
 	int *owe_trans_scan_freq;
 #endif /* CONFIG_OWE */
+
+#ifdef CONFIG_NAN_USD
+	struct nan_de *nan_de;
+	struct wpa_radio_work *nan_usd_listen_work;
+	struct wpa_radio_work *nan_usd_tx_work;
+#endif /* CONFIG_NAN_USD */
 };
 
 

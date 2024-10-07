@@ -327,6 +327,12 @@ L_CFLAGS += -DCONFIG_DPP3
 endif
 endif
 
+ifdef CONFIG_NAN_USD
+OBJS += src/common/nan_de.c
+OBJS += nan_usd.c
+L_CFLAGS += -DCONFIG_NAN_USD
+endif
+
 ifeq ($(CONFIG_OWE),y)
 L_CFLAGS += -DCONFIG_OWE
 NEED_ECC=y
@@ -1016,6 +1022,9 @@ ifeq ($(CONFIG_DPP),y)
 OBJS += src/ap/dpp_hostapd.c
 OBJS += src/ap/gas_query_ap.c
 NEED_AP_GAS_SERV=y
+endif
+ifdef CONFIG_NAN_USD
+OBJS += src/ap/nan_usd_ap.c
 endif
 ifdef CONFIG_INTERWORKING
 NEED_AP_GAS_SERV=y
