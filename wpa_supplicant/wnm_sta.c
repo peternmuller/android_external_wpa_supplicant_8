@@ -686,9 +686,8 @@ get_mbo_transition_candidate(struct wpa_supplicant *wpa_s,
 	if (reason) {
 		for (i = 0; i < info->num; i++) {
 			if (first_candidate_bssid &&
-			    os_memcmp(first_candidate_bssid,
-				      info->candidates[i].bssid, ETH_ALEN) == 0)
-			{
+			    ether_addr_equal(first_candidate_bssid,
+					     info->candidates[i].bssid)) {
 				*reason = info->candidates[i].reject_reason;
 				break;
 			}
@@ -1194,8 +1193,8 @@ int wnm_scan_process(struct wpa_supplicant *wpa_s, int reply_on_fail)
 	}
 
 	if (!wpa_s->current_bss ||
-	    os_memcmp(wpa_s->wnm_cand_from_bss, wpa_s->current_bss->bssid,
-		      ETH_ALEN) != 0) {
+	    !ether_addr_equal(wpa_s->wnm_cand_from_bss,
+			      wpa_s->current_bss->bssid)) {
 		wpa_printf(MSG_DEBUG, "WNM: Stored BSS transition candidate list not from the current BSS - ignore it");
 		return 0;
 	}
@@ -1388,7 +1387,7 @@ static int wnm_fetch_scan_results(struct wpa_supplicant *wpa_s)
 			const u8 *ssid_ie;
 
 			res = scan_res->res[j];
-			if (os_memcmp(nei->bssid, res->bssid, ETH_ALEN) != 0 ||
+			if (!ether_addr_equal(nei->bssid, res->bssid) ||
 			    res->age > WNM_SCAN_RESULT_AGE * 1000)
 				continue;
 			bss = wpa_s->current_bss;
@@ -1572,8 +1571,7 @@ static void ieee802_11_rx_bss_trans_mgmt_req(struct wpa_supplicant *wpa_s,
 				wnm_parse_neighbor_report(wpa_s, pos, len, rep);
 				if ((wpa_s->wnm_mode &
 				     WNM_BSS_TM_REQ_DISASSOC_IMMINENT) &&
-				    os_memcmp(rep->bssid, wpa_s->bssid,
-					      ETH_ALEN) == 0)
+				    ether_addr_equal(rep->bssid, wpa_s->bssid))
 					rep->disassoc_imminent = 1;
 
 				wpa_s->wnm_num_neighbor_report++;

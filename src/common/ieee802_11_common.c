@@ -140,6 +140,11 @@ static int ieee802_11_parse_vendor_specific(const u8 *pos, size_t elen,
 			elems->sae_pk = pos + 4;
 			elems->sae_pk_len = elen - 4;
 			break;
+		case P2P2_OUI_TYPE:
+			/* Wi-Fi Alliance - P2P2 IE */
+			elems->p2p2_ie = pos;
+			elems->p2p2_ie_len = elen;
+			break;
 		default:
 			wpa_printf(MSG_MSGDUMP, "Unknown WFA "
 				   "information element ignored "
