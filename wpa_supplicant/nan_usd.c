@@ -336,11 +336,12 @@ void wpas_nan_usd_deinit(struct wpa_supplicant *wpa_s)
 
 
 void wpas_nan_usd_rx_sdf(struct wpa_supplicant *wpa_s, const u8 *src,
+			 const u8 *a3,
 			 unsigned int freq, const u8 *buf, size_t len)
 {
 	if (!wpa_s->nan_de)
 		return;
-	nan_de_rx_sdf(wpa_s->nan_de, src, freq, buf, len);
+	nan_de_rx_sdf(wpa_s->nan_de, src, a3, freq, buf, len);
 }
 
 
@@ -409,7 +410,7 @@ int wpas_nan_usd_update_publish(struct wpa_supplicant *wpa_s, int publish_id,
 		return -1;
 	ret = nan_de_update_publish(wpa_s->nan_de, publish_id, ssi);
 	if (ret == 0 && (wpa_s->drv_flags2 & WPA_DRIVER_FLAGS2_NAN_OFFLOAD) &&
-	    wpas_drv_nan_cancel_publish(wpa_s, publish_id) < 0)
+	    wpas_drv_nan_update_publish(wpa_s, publish_id, ssi) < 0)
 		return -1;
 	return ret;
 }

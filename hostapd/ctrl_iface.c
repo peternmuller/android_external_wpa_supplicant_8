@@ -3761,7 +3761,7 @@ static int hostapd_ctrl_nan_transmit(struct hostapd_data *hapd, char *cmd)
 	}
 
 	ret = hostapd_nan_usd_transmit(hapd, handle, ssi, NULL, peer_addr,
-				    req_instance_id);
+				       req_instance_id);
 fail:
 	wpabuf_free(ssi);
 	return ret;
