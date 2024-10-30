@@ -50,6 +50,7 @@
 #include "mesh.h"
 #include "mesh_mpm.h"
 #include "wmm_ac.h"
+#include "nan_usd.h"
 #include "dpp_supplicant.h"
 #include "rsn_supp/wpa_i.h"
 
@@ -1309,7 +1310,7 @@ static bool wpa_scan_res_ok(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 #endif /* CONFIG_WPS */
 
 	if (ssid->bssid_set && ssid->ssid_len == 0 &&
-	    os_memcmp(bss->bssid, ssid->bssid, ETH_ALEN) == 0)
+	    ether_addr_equal(bss->bssid, ssid->bssid))
 		check_ssid = false;
 
 	if (check_ssid &&
@@ -1321,7 +1322,7 @@ static bool wpa_scan_res_ok(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 	}
 
 	if (ssid->bssid_set &&
-	    os_memcmp(bss->bssid, ssid->bssid, ETH_ALEN) != 0) {
+	    !ether_addr_equal(bss->bssid, ssid->bssid)) {
 		if (debug_print)
 			wpa_dbg(wpa_s, MSG_DEBUG, "   skip - BSSID mismatch");
 		return false;
@@ -1490,7 +1491,7 @@ static bool wpa_scan_res_ok(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 		}
 
 		if (p2p_parse_dev_addr_in_p2p_ie(p2p_ie, dev_addr) < 0 ||
-		    os_memcmp(dev_addr, ssid->go_p2p_dev_addr, ETH_ALEN) != 0) {
+		    !ether_addr_equal(dev_addr, ssid->go_p2p_dev_addr)) {
 			if (debug_print)
 				wpa_dbg(wpa_s, MSG_DEBUG,
 					"   skip - no matching GO P2P Device Address in P2P element");
@@ -1976,12 +1977,11 @@ int wpa_supplicant_connect(struct wpa_supplicant *wpa_s,
 	 * the selected BSSID, do not trigger new attempt.
 	 */
 	if (wpa_s->reassociate ||
-	    (os_memcmp(selected->bssid, wpa_s->bssid, ETH_ALEN) != 0 &&
+	    (!ether_addr_equal(selected->bssid, wpa_s->bssid) &&
 	     ((wpa_s->wpa_state != WPA_ASSOCIATING &&
 	       wpa_s->wpa_state != WPA_AUTHENTICATING) ||
 	      (!is_zero_ether_addr(wpa_s->pending_bssid) &&
-	       os_memcmp(selected->bssid, wpa_s->pending_bssid, ETH_ALEN) !=
-	       0) ||
+	       !ether_addr_equal(selected->bssid, wpa_s->pending_bssid)) ||
 	      (is_zero_ether_addr(wpa_s->pending_bssid) &&
 	       ssid != wpa_s->current_ssid)))) {
 		if (wpa_supplicant_scard_init(wpa_s, ssid)) {
@@ -2124,8 +2124,7 @@ int wpa_supplicant_need_to_roam_within_ess(struct wpa_supplicant *wpa_s,
 		selected->snr, selected->est_throughput);
 
 	if (wpa_s->current_ssid->bssid_set &&
-	    os_memcmp(selected->bssid, wpa_s->current_ssid->bssid, ETH_ALEN) ==
-	    0) {
+	    ether_addr_equal(selected->bssid, wpa_s->current_ssid->bssid)) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "Allow reassociation - selected BSS "
 			"has preferred BSSID");
 		return 1;
@@ -3766,18 +3765,17 @@ static int wpa_drv_get_mlo_info(struct wpa_supplicant *wpa_s)
 			if (!(mlo.valid_links & BIT(i)))
 				continue;
 
-			if (os_memcmp(wpa_s->links[i].addr, mlo.links[i].addr,
-				      ETH_ALEN) != 0 ||
-			    os_memcmp(wpa_s->links[i].bssid, mlo.links[i].bssid,
-				      ETH_ALEN) != 0) {
+			if (!ether_addr_equal(wpa_s->links[i].addr,
+					      mlo.links[i].addr) ||
+			    !ether_addr_equal(wpa_s->links[i].bssid,
+					      mlo.links[i].bssid)) {
 				match = false;
 				break;
 			}
 		}
 
 		if (match && wpa_s->mlo_assoc_link_id == mlo.assoc_link_id &&
-		    os_memcmp(wpa_s->ap_mld_addr, mlo.ap_mld_addr,
-			      ETH_ALEN) == 0)
+		    ether_addr_equal(wpa_s->ap_mld_addr, mlo.ap_mld_addr))
 			return 0;
 	}
 
@@ -3959,7 +3957,7 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 #endif
 
 	wpa_supplicant_set_state(wpa_s, WPA_ASSOCIATED);
-	if (os_memcmp(bssid, wpa_s->bssid, ETH_ALEN) != 0) {
+	if (!ether_addr_equal(bssid, wpa_s->bssid)) {
 		if (os_reltime_initialized(&wpa_s->session_start)) {
 			os_reltime_age(&wpa_s->session_start,
 				       &wpa_s->session_length);
@@ -4158,9 +4156,9 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 		os_get_reltime(&now);
 		os_reltime_sub(&now, &wpa_s->pending_eapol_rx_time, &age);
 		if (age.sec == 0 && age.usec < 200000 &&
-		    os_memcmp(wpa_s->pending_eapol_rx_src,
-			      wpa_s->valid_links ? wpa_s->ap_mld_addr : bssid,
-			      ETH_ALEN) == 0) {
+		    ether_addr_equal(wpa_s->pending_eapol_rx_src,
+				     wpa_s->valid_links ? wpa_s->ap_mld_addr :
+				     bssid)) {
 			wpa_dbg(wpa_s, MSG_DEBUG, "Process pending EAPOL "
 				"frame that was received just before "
 				"association notification");
@@ -4767,7 +4765,7 @@ static void ft_rx_action(struct wpa_supplicant *wpa_s, const u8 *data,
 		MACSTR " TargetAP " MACSTR " status %u",
 		MAC2STR(sta_addr), MAC2STR(target_ap_addr), status);
 
-	if (os_memcmp(sta_addr, wpa_s->own_addr, ETH_ALEN) != 0) {
+	if (!ether_addr_equal(sta_addr, wpa_s->own_addr)) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "FT: Foreign STA Address " MACSTR
 			" in FT Action Response", MAC2STR(sta_addr));
 		return;
@@ -5142,7 +5140,7 @@ static void wpas_event_rx_mgmt_action(struct wpa_supplicant *wpa_s,
 		size_t qlen = plen - 1;
 		wpa_dbg(wpa_s, MSG_DEBUG, "Interworking: Received QoS Map Configure frame from "
 			MACSTR, MAC2STR(mgmt->sa));
-		if (os_memcmp(mgmt->sa, wpa_s->bssid, ETH_ALEN) == 0 &&
+		if (ether_addr_equal(mgmt->sa, wpa_s->bssid) &&
 		    qlen > 2 && pos[0] == WLAN_EID_QOS_MAP_SET &&
 		    pos[1] <= qlen - 2 && pos[1] >= 16)
 			wpas_qos_map_set(wpa_s, pos + 2, pos[1]);
@@ -5179,6 +5177,18 @@ static void wpas_event_rx_mgmt_action(struct wpa_supplicant *wpa_s,
 		return;
 	}
 #endif /* CONFIG_FST */
+
+#ifdef CONFIG_NAN_USD
+	if (category == WLAN_ACTION_PUBLIC && plen >= 5 &&
+	    payload[0] == WLAN_PA_VENDOR_SPECIFIC &&
+	    WPA_GET_BE32(&payload[1]) == NAN_SDF_VENDOR_TYPE) {
+		payload += 5;
+		plen -= 5;
+		wpas_nan_usd_rx_sdf(wpa_s, mgmt->sa, mgmt->bssid, freq,
+				    payload, plen);
+		return;
+	}
+#endif /* CONFIG_NAN_USD */
 
 #ifdef CONFIG_DPP
 	if (category == WLAN_ACTION_PUBLIC && plen >= 5 &&
@@ -5592,7 +5602,7 @@ static void wpas_event_unprot_beacon(struct wpa_supplicant *wpa_s,
 	int res;
 
 	if (!data || wpa_s->wpa_state != WPA_COMPLETED ||
-	    os_memcmp(data->sa, wpa_s->bssid, ETH_ALEN) != 0)
+	    !ether_addr_equal(data->sa, wpa_s->bssid))
 		return;
 	wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_UNPROT_BEACON MACSTR,
 		MAC2STR(data->sa));
@@ -5682,7 +5692,7 @@ static void wpas_link_reconfig(struct wpa_supplicant *wpa_s)
 		return;
 	}
 
-	if (os_memcmp(bssid, wpa_s->bssid, ETH_ALEN) != 0) {
+	if (!ether_addr_equal(bssid, wpa_s->bssid)) {
 		os_memcpy(wpa_s->bssid, bssid, ETH_ALEN);
 		wpa_supplicant_update_current_bss(wpa_s, wpa_s->bssid);
 		wpas_notify_bssid_changed(wpa_s);
@@ -5708,6 +5718,37 @@ static void wpas_link_reconfig(struct wpa_supplicant *wpa_s)
 	wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_LINK_RECONFIG "valid_links=0x%x",
 		wpa_s->valid_links);
 }
+
+
+#ifdef CONFIG_PASN
+static int wpas_pasn_auth(struct wpa_supplicant *wpa_s,
+			  const struct ieee80211_mgmt *mgmt, size_t len,
+			  int freq)
+{
+#ifdef CONFIG_P2P
+	struct ieee802_11_elems elems;
+
+	if (len < 24) {
+		wpa_printf(MSG_DEBUG, "nl80211: Too short Management frame");
+		return -2;
+	}
+
+	if (ieee802_11_parse_elems(mgmt->u.auth.variable,
+				   len - offsetof(struct ieee80211_mgmt,
+						  u.auth.variable),
+				   &elems, 1) == ParseFailed) {
+		wpa_printf(MSG_DEBUG,
+			   "PASN: Failed parsing Authentication frame");
+		return -2;
+	}
+
+	if (elems.p2p2_ie && elems.p2p2_ie_len)
+		return wpas_p2p_pasn_auth_rx(wpa_s, mgmt, len, freq);
+#endif /* CONFIG_P2P */
+
+	return wpas_pasn_auth_rx(wpa_s, mgmt, len);
+}
+#endif /* CONFIG_PASN */
 
 
 void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
@@ -5967,8 +6008,8 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 		 */
 		if (data->tx_status.type == WLAN_FC_TYPE_MGMT &&
 		    data->tx_status.stype == WLAN_FC_STYPE_ACTION &&
-		    os_memcmp(wpa_s->p2pdev->pending_action_dst,
-			      data->tx_status.dst, ETH_ALEN) == 0) {
+		    ether_addr_equal(wpa_s->p2pdev->pending_action_dst,
+				     data->tx_status.dst)) {
 			offchannel_send_action_tx_status(
 				wpa_s->p2pdev, data->tx_status.dst,
 				data->tx_status.data,
@@ -6215,8 +6256,8 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 			}
 #ifdef CONFIG_PASN
 			if (stype == WLAN_FC_STYPE_AUTH &&
-			    wpas_pasn_auth_rx(wpa_s, mgmt,
-					      data->rx_mgmt.frame_len) != -2)
+			    wpas_pasn_auth(wpa_s, mgmt, data->rx_mgmt.frame_len,
+					   data->rx_mgmt.freq) != -2)
 				break;
 #endif /* CONFIG_PASN */
 
@@ -6291,6 +6332,11 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 			wpa_s, data->remain_on_channel.freq,
 			data->remain_on_channel.duration);
 #endif /* CONFIG_DPP */
+#ifdef CONFIG_NAN_USD
+		wpas_nan_usd_remain_on_channel_cb(
+			wpa_s, data->remain_on_channel.freq,
+			data->remain_on_channel.duration);
+#endif /* CONFIG_NAN_USD */
 		break;
 	case EVENT_CANCEL_REMAIN_ON_CHANNEL:
 #ifdef CONFIG_OFFCHANNEL
@@ -6303,6 +6349,10 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 		wpas_dpp_cancel_remain_on_channel_cb(
 			wpa_s, data->remain_on_channel.freq);
 #endif /* CONFIG_DPP */
+#ifdef CONFIG_NAN_USD
+		wpas_nan_usd_cancel_remain_on_channel_cb(
+			wpa_s, data->remain_on_channel.freq);
+#endif /* CONFIG_NAN_USD */
 		break;
 	case EVENT_EAPOL_RX:
 		wpa_supplicant_rx_eapol(wpa_s, data->eapol_rx.src,
@@ -6341,7 +6391,7 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 					     wpa_s, NULL);
 			os_memcpy(addr, wpa_s->own_addr, ETH_ALEN);
 			wpa_supplicant_update_mac_addr(wpa_s);
-			if (os_memcmp(addr, wpa_s->own_addr, ETH_ALEN) != 0)
+			if (!ether_addr_equal(addr, wpa_s->own_addr))
 				wpa_sm_pmksa_cache_flush(wpa_s->wpa, NULL);
 			else
 				wpa_sm_pmksa_cache_reconfig(wpa_s->wpa);
@@ -6475,8 +6525,8 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 #endif /* CONFIG_IBSS_RSN */
 		break;
 	case EVENT_DRIVER_GTK_REKEY:
-		if (os_memcmp(data->driver_gtk_rekey.bssid,
-			      wpa_s->bssid, ETH_ALEN))
+		if (!ether_addr_equal(data->driver_gtk_rekey.bssid,
+				      wpa_s->bssid))
 			break;
 		if (!wpa_s->wpa)
 			break;
@@ -6638,6 +6688,9 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 #ifdef CONFIG_DPP
 		wpas_dpp_tx_wait_expire(wpa_s);
 #endif /* CONFIG_DPP */
+#ifdef CONFIG_NAN_USD
+		wpas_nan_usd_tx_wait_expire(wpa_s);
+#endif /* CONFIG_NAN_USD */
 		break;
 	case EVENT_TID_LINK_MAP:
 		if (data)

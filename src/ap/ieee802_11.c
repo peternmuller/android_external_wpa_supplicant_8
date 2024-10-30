@@ -26,6 +26,7 @@
 #include "common/wpa_common.h"
 #include "common/wpa_ctrl.h"
 #include "common/ptksa_cache.h"
+#include "common/nan_de.h"
 #include "radius/radius.h"
 #include "radius/radius_client.h"
 #include "p2p/p2p.h"
@@ -56,6 +57,7 @@
 #include "dpp_hostapd.h"
 #include "gas_query_ap.h"
 #include "comeback_token.h"
+#include "nan_usd_ap.h"
 #include "pasn/pasn_common.h"
 
 
@@ -556,7 +558,7 @@ const char * sae_get_password(struct hostapd_data *hapd,
 	for (pw = hapd->conf->sae_passwords; pw; pw = pw->next) {
 		if (!is_broadcast_ether_addr(pw->peer_addr) &&
 		    (!sta ||
-		     os_memcmp(pw->peer_addr, sta->addr, ETH_ALEN) != 0))
+		     !ether_addr_equal(pw->peer_addr, sta->addr)))
 			continue;
 		if ((rx_id && !pw->identifier) || (!rx_id && pw->identifier))
 			continue;
@@ -1672,7 +1674,7 @@ static void auth_sae_queue(struct hostapd_data *hapd,
 	dl_list_for_each(q2, &hapd->sae_commit_queue,
 			 struct hostapd_sae_commit_queue, list) {
 		mgmt2 = (const struct ieee80211_mgmt *) q2->msg;
-		if (os_memcmp(mgmt->sa, mgmt2->sa, ETH_ALEN) == 0 &&
+		if (ether_addr_equal(mgmt->sa, mgmt2->sa) &&
 		    mgmt->u.auth.auth_transaction ==
 		    mgmt2->u.auth.auth_transaction) {
 			wpa_printf(MSG_DEBUG,
@@ -1703,7 +1705,7 @@ static int auth_sae_queued_addr(struct hostapd_data *hapd, const u8 *addr)
 	dl_list_for_each(q, &hapd->sae_commit_queue,
 			 struct hostapd_sae_commit_queue, list) {
 		mgmt = (const struct ieee80211_mgmt *) q->msg;
-		if (os_memcmp(addr, mgmt->sa, ETH_ALEN) == 0)
+		if (ether_addr_equal(addr, mgmt->sa))
 			return 1;
 	}
 
@@ -2400,7 +2402,8 @@ static void pasn_fils_auth_resp(struct hostapd_data *hapd,
 			      wpabuf_head(pasn->secret),
 			      wpabuf_len(pasn->secret),
 			      pasn_get_ptk(sta->pasn), pasn_get_akmp(sta->pasn),
-			      pasn_get_cipher(sta->pasn), sta->pasn->kdk_len);
+			      pasn_get_cipher(sta->pasn), sta->pasn->kdk_len,
+			      sta->pasn->kek_len);
 	if (ret) {
 		wpa_printf(MSG_DEBUG, "PASN: FILS: Failed to derive PTK");
 		goto fail;
@@ -2625,7 +2628,7 @@ static int pasn_set_keys_from_cache(struct hostapd_data *hapd,
 		return -1;
 	}
 
-	if (os_memcmp(entry->own_addr, own_addr, ETH_ALEN) != 0) {
+	if (!ether_addr_equal(entry->own_addr, own_addr)) {
 		wpa_printf(MSG_DEBUG,
 			   "PASN: own addr " MACSTR " and PTKSA entry own addr "
 			   MACSTR " differ",
@@ -2923,7 +2926,7 @@ static void handle_auth(struct hostapd_data *hapd,
 		goto fail;
 	}
 
-	if (os_memcmp(mgmt->sa, hapd->own_addr, ETH_ALEN) == 0) {
+	if (ether_addr_equal(mgmt->sa, hapd->own_addr)) {
 		wpa_printf(MSG_INFO, "Station " MACSTR " not allowed to authenticate",
 			   MAC2STR(sa));
 		resp = WLAN_STATUS_UNSPECIFIED_FAILURE;
@@ -2931,8 +2934,8 @@ static void handle_auth(struct hostapd_data *hapd,
 	}
 
 	if (mld_sta &&
-	    (os_memcmp(sa, hapd->own_addr, ETH_ALEN) == 0 ||
-	     os_memcmp(sa, hapd->mld_addr, ETH_ALEN) == 0)) {
+	    (ether_addr_equal(sa, hapd->own_addr) ||
+	     ether_addr_equal(sa, hapd->mld_addr))) {
 		wpa_printf(MSG_INFO,
 			   "Station " MACSTR " not allowed to authenticate",
 			   MAC2STR(sa));
@@ -5982,6 +5985,25 @@ static int handle_action(struct hostapd_data *hapd,
 				return 1;
 		}
 #endif /* CONFIG_DPP */
+#ifdef CONFIG_NAN_USD
+		if (mgmt->u.action.category == WLAN_ACTION_PUBLIC &&
+		    len >= IEEE80211_HDRLEN + 5 &&
+		    mgmt->u.action.u.vs_public_action.action ==
+		    WLAN_PA_VENDOR_SPECIFIC &&
+		    WPA_GET_BE24(mgmt->u.action.u.vs_public_action.oui) ==
+		    OUI_WFA &&
+		    mgmt->u.action.u.vs_public_action.variable[0] ==
+		    NAN_OUI_TYPE) {
+			const u8 *pos, *end;
+
+			pos = mgmt->u.action.u.vs_public_action.variable;
+			end = ((const u8 *) mgmt) + len;
+			pos++;
+			hostapd_nan_usd_rx_sdf(hapd, mgmt->sa, mgmt->bssid,
+					       freq, pos, end - pos);
+			return 1;
+		}
+#endif /* CONFIG_NAN_USD */
 		if (hapd->public_action_cb) {
 			hapd->public_action_cb(hapd->public_action_cb_ctx,
 					       (u8 *) mgmt, len, freq);
@@ -6087,6 +6109,10 @@ int ieee802_11_mgmt(struct hostapd_data *hapd, const u8 *buf, size_t len,
 	int ret = 0;
 	unsigned int freq;
 	int ssi_signal = fi ? fi->ssi_signal : 0;
+#ifdef CONFIG_NAN_USD
+	static const u8 nan_network_id[ETH_ALEN] =
+		{ 0x51, 0x6f, 0x9a, 0x01, 0x00, 0x00 };
+#endif /* CONFIG_NAN_USD */
 
 	if (len < 24)
 		return 0;
@@ -6102,7 +6128,7 @@ int ieee802_11_mgmt(struct hostapd_data *hapd, const u8 *buf, size_t len,
 
 	if (is_multicast_ether_addr(mgmt->sa) ||
 	    is_zero_ether_addr(mgmt->sa) ||
-	    os_memcmp(mgmt->sa, hapd->own_addr, ETH_ALEN) == 0) {
+	    ether_addr_equal(mgmt->sa, hapd->own_addr)) {
 		/* Do not process any frames with unexpected/invalid SA so that
 		 * we do not add any state for unexpected STA addresses or end
 		 * up sending out frames to unexpected destination. */
@@ -6118,6 +6144,9 @@ int ieee802_11_mgmt(struct hostapd_data *hapd, const u8 *buf, size_t len,
 	}
 
 	if (!is_broadcast_ether_addr(mgmt->bssid) &&
+#ifdef CONFIG_NAN_USD
+	    !nan_de_is_nan_network_id(mgmt->bssid) &&
+#endif /* CONFIG_NAN_USD */
 #ifdef CONFIG_P2P
 	    /* Invitation responses can be sent with the peer MAC as BSSID */
 	    !((hapd->conf->p2p & P2P_GROUP_OWNER) &&
@@ -6128,9 +6157,9 @@ int ieee802_11_mgmt(struct hostapd_data *hapd, const u8 *buf, size_t len,
 #endif /* CONFIG_MESH */
 #ifdef CONFIG_IEEE80211BE
 	    !(hapd->conf->mld_ap &&
-	      os_memcmp(hapd->mld_addr, mgmt->bssid, ETH_ALEN) == 0) &&
+	      ether_addr_equal(hapd->mld_addr, mgmt->bssid)) &&
 #endif /* CONFIG_IEEE80211BE */
-	    os_memcmp(mgmt->bssid, hapd->own_addr, ETH_ALEN) != 0) {
+	    !ether_addr_equal(mgmt->bssid, hapd->own_addr)) {
 		wpa_printf(MSG_INFO, "MGMT: BSSID=" MACSTR " not our address",
 			   MAC2STR(mgmt->bssid));
 		return 0;
@@ -6151,9 +6180,12 @@ int ieee802_11_mgmt(struct hostapd_data *hapd, const u8 *buf, size_t len,
 	     stype != WLAN_FC_STYPE_ACTION) &&
 #ifdef CONFIG_IEEE80211BE
 	    !(hapd->conf->mld_ap &&
-	      os_memcmp(hapd->mld_addr, mgmt->bssid, ETH_ALEN) == 0) &&
+	      ether_addr_equal(hapd->mld_addr, mgmt->bssid)) &&
 #endif /* CONFIG_IEEE80211BE */
-	    os_memcmp(mgmt->da, hapd->own_addr, ETH_ALEN) != 0) {
+#ifdef CONFIG_NAN_USD
+	    !ether_addr_equal(mgmt->da, nan_network_id) &&
+#endif /* CONFIG_NAN_USD */
+	    !ether_addr_equal(mgmt->da, hapd->own_addr)) {
 		hostapd_logger(hapd, mgmt->sa, HOSTAPD_MODULE_IEEE80211,
 			       HOSTAPD_LEVEL_DEBUG,
 			       "MGMT: DA=" MACSTR " not our address",
@@ -6882,7 +6914,7 @@ void ieee802_11_rx_from_unknown(struct hostapd_data *hapd, const u8 *src,
 	wpa_printf(MSG_DEBUG, "Data/PS-poll frame from not associated STA "
 		   MACSTR, MAC2STR(src));
 	if (is_multicast_ether_addr(src) || is_zero_ether_addr(src) ||
-	    os_memcmp(src, hapd->own_addr, ETH_ALEN) == 0) {
+	    ether_addr_equal(src, hapd->own_addr)) {
 		/* Broadcast bit set in SA or unexpected SA?! Ignore the frame
 		 * silently. */
 		return;

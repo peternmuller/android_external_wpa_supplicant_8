@@ -31,6 +31,8 @@
 #include "common/ieee802_11_defs.h"
 #include "common/ieee802_11_common.h"
 #include "common/wpa_common.h"
+#include "common/nan.h"
+#include "common/nan_de.h"
 #include "crypto/sha256.h"
 #include "crypto/sha384.h"
 #include "netlink.h"
@@ -1249,7 +1251,7 @@ static void nl80211_refresh_mac(struct wpa_driver_nl80211_data *drv,
 		wpa_printf(MSG_DEBUG,
 			   "nl80211: %s: failed to re-read MAC address",
 			   bss->ifname);
-	} else if (bss && os_memcmp(addr, bss->addr, ETH_ALEN) != 0) {
+	} else if (bss && !ether_addr_equal(addr, bss->addr)) {
 		wpa_printf(MSG_DEBUG,
 			   "nl80211: Own MAC address on ifindex %d (%s) changed from "
 			   MACSTR " to " MACSTR,
@@ -2425,12 +2427,20 @@ static void nl80211_mgmt_handle_register_eloop(struct i802_bss *bss)
 }
 
 
-static int nl80211_register_action_frame(struct i802_bss *bss,
-					 const u8 *match, size_t match_len)
+static int nl80211_register_action_frame2(struct i802_bss *bss,
+					  const u8 *match, size_t match_len,
+					  bool multicast)
 {
 	u16 type = (WLAN_FC_TYPE_MGMT << 2) | (WLAN_FC_STYPE_ACTION << 4);
 	return nl80211_register_frame(bss, bss->nl_mgmt,
-				      type, match, match_len, false);
+				      type, match, match_len, multicast);
+}
+
+
+static int nl80211_register_action_frame(struct i802_bss *bss,
+					 const u8 *match, size_t match_len)
+{
+	return nl80211_register_action_frame2(bss, match, match_len, false);
 }
 
 
@@ -2505,6 +2515,17 @@ static int nl80211_mgmt_subscribe_non_ap(struct i802_bss *bss)
 					  5) < 0)
 		ret = -1;
 #endif /* CONFIG_P2P */
+#ifdef CONFIG_NAN_USD
+#define NAN_PUB_ACTION ((u8 *) "\x04\x09\x50\x6f\x9a\x13")
+	/* NAN SDF Public Action */
+	if (nl80211_register_action_frame2(bss, NAN_PUB_ACTION, 6, true) < 0) {
+		/* fallback to non-multicast */
+		if (nl80211_register_action_frame2(bss, NAN_PUB_ACTION, 6,
+						   false) < 0)
+			ret = -1;
+	}
+#undef NAN_PUB_ACTION
+#endif /* CONFIG_NAN_USD */
 #ifdef CONFIG_DPP
 	/* DPP Public Action */
 	if (nl80211_register_action_frame(bss,
@@ -4263,7 +4284,7 @@ static int nl80211_get_link_freq(struct i802_bss *bss, const u8 *addr,
 	size_t i;
 
 	for (i = 0; i < bss->n_links; i++) {
-		if (os_memcmp(bss->links[i].addr, addr, ETH_ALEN) == 0) {
+		if (ether_addr_equal(bss->links[i].addr, addr)) {
 			wpa_printf(MSG_DEBUG,
 				   "nl80211: Use link freq=%d for address "
 				   MACSTR,
@@ -8769,7 +8790,7 @@ static int nl80211_addr_in_use(struct nl80211_global *global, const u8 *addr)
 	struct wpa_driver_nl80211_data *drv;
 	dl_list_for_each(drv, &global->interfaces,
 			 struct wpa_driver_nl80211_data, list) {
-		if (os_memcmp(addr, drv->first_bss->addr, ETH_ALEN) == 0)
+		if (ether_addr_equal(addr, drv->first_bss->addr))
 			return 1;
 	}
 	return 0;
@@ -9185,7 +9206,7 @@ static int wpa_driver_nl80211_send_action(struct i802_bss *bss,
 	os_memcpy(hdr->addr2, src, ETH_ALEN);
 	os_memcpy(hdr->addr3, bssid, ETH_ALEN);
 
-	if (os_memcmp(bss->addr, src, ETH_ALEN) != 0) {
+	if (!ether_addr_equal(bss->addr, src)) {
 		wpa_printf(MSG_DEBUG, "nl80211: Use random TA " MACSTR,
 			   MAC2STR(src));
 		os_memcpy(bss->rand_addr, src, ETH_ALEN);
@@ -12487,7 +12508,7 @@ static int add_acs_ch_list(struct nl_msg *msg, const int *freq_list)
 }
 
 
-static int add_acs_freq_list(struct nl_msg *msg, const int *freq_list)
+static int add_freq_list(struct nl_msg *msg, int attr, const int *freq_list)
 {
 	int i, len, ret;
 	u32 *freqs;
@@ -12500,8 +12521,7 @@ static int add_acs_freq_list(struct nl_msg *msg, const int *freq_list)
 		return -1;
 	for (i = 0; i < len; i++)
 		freqs[i] = freq_list[i];
-	ret = nla_put(msg, QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST,
-		      sizeof(u32) * len, freqs);
+	ret = nla_put(msg, attr, sizeof(u32) * len, freqs);
 	os_free(freqs);
 	return ret;
 }
@@ -12536,7 +12556,8 @@ static int nl80211_qca_do_acs(struct wpa_driver_nl80211_data *drv,
 	    nla_put_u16(msg, QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH,
 			params->ch_width) ||
 	    add_acs_ch_list(msg, params->freq_list) ||
-	    add_acs_freq_list(msg, params->freq_list) ||
+	    add_freq_list(msg, QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST,
+			  params->freq_list) ||
 	    (params->edmg_enabled &&
 	     nla_put_flag(msg, QCA_WLAN_VENDOR_ATTR_ACS_EDMG_ENABLED))) {
 		nlmsg_free(msg);
@@ -13421,6 +13442,304 @@ fail:
 
 #endif /* CONFIG_PASN */
 
+#ifdef CONFIG_NAN_USD
+
+static int nl80211_nan_flush(void *priv)
+{
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	struct nl_msg *msg;
+	struct nlattr *container;
+	int ret;
+
+	wpa_printf(MSG_DEBUG, "nl80211: NAN USD flush");
+
+	msg = nl80211_drv_msg(drv, 0, NL80211_CMD_VENDOR);
+	if (!msg ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, OUI_QCA) ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_SUBCMD,
+			QCA_NL80211_VENDOR_SUBCMD_USD))
+		goto fail;
+
+	container = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+	if (!container ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_OP_TYPE,
+		       QCA_WLAN_VENDOR_USD_OP_TYPE_FLUSH))
+		goto fail;
+
+	nla_nest_end(msg, container);
+
+	ret = send_and_recv_msgs(drv, msg, NULL, NULL, NULL, NULL);
+	if (ret)
+		wpa_printf(MSG_ERROR,
+			   "nl80211: Failed to send NAN USD flush");
+	return ret;
+
+fail:
+	nlmsg_free(msg);
+	return -1;
+}
+
+
+static int nl80211_nan_publish(void *priv, const u8 *src, int publish_id,
+			       const char *service_name, const u8 *service_id,
+			       enum nan_service_protocol_type srv_proto_type,
+			       const struct wpabuf *ssi,
+			       const struct wpabuf *elems,
+			       struct nan_publish_params *params)
+{
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	struct nl_msg *msg;
+	struct nlattr *container, *attr;
+	int ret;
+
+	wpa_printf(MSG_DEBUG,
+		   "nl80211: Start NAN USD publish: default freq=%u, ttl=%u",
+		   params->freq, params->ttl);
+	wpa_hexdump_buf(MSG_MSGDUMP, "nl80211: USD elements", elems);
+
+	msg = nl80211_drv_msg(drv, 0, NL80211_CMD_VENDOR);
+	if (!msg ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, OUI_QCA) ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_SUBCMD,
+			QCA_NL80211_VENDOR_SUBCMD_USD))
+		goto fail;
+
+	container = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+	if (!container)
+		goto fail;
+
+	if (nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_OP_TYPE,
+		       QCA_WLAN_VENDOR_USD_OP_TYPE_PUBLISH) ||
+	    nla_put(msg, QCA_WLAN_VENDOR_ATTR_USD_SRC_ADDR, ETH_ALEN, src) ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_INSTANCE_ID, publish_id) ||
+	    nla_put(msg, QCA_WLAN_VENDOR_ATTR_USD_SERVICE_ID,
+		    NAN_SERVICE_ID_LEN, service_id) ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_SERVICE_PROTOCOL_TYPE,
+		       srv_proto_type) ||
+	    nla_put_u16(msg, QCA_WLAN_VENDOR_ATTR_USD_TTL, params->ttl) ||
+	    nla_put(msg, QCA_WLAN_VENDOR_ATTR_USD_ELEMENT_CONTAINER,
+		    wpabuf_len(elems), wpabuf_head(elems)) ||
+	    (ssi && nla_put(msg, QCA_WLAN_VENDOR_ATTR_USD_SSI,
+			    wpabuf_len(ssi), wpabuf_head(ssi))))
+		goto fail;
+
+	attr = nla_nest_start(msg, QCA_WLAN_VENDOR_ATTR_USD_CHAN_CONFIG);
+	if (!attr)
+		goto fail;
+	if (nla_put_u32(msg, QCA_WLAN_VENDOR_ATTR_USD_CHAN_CONFIG_DEFAULT_FREQ,
+			params->freq) ||
+	    add_freq_list(msg, QCA_WLAN_VENDOR_ATTR_USD_CHAN_CONFIG_FREQ_LIST,
+			  params->freq_list))
+		goto fail;
+	nla_nest_end(msg, attr);
+
+	nla_nest_end(msg, container);
+	ret = send_and_recv_msgs(drv, msg, NULL, NULL, NULL, NULL);
+	if (ret)
+		wpa_printf(MSG_ERROR,
+			   "nl80211: Failed to send NAN USD publish");
+	return ret;
+
+fail:
+	nlmsg_free(msg);
+	return -1;
+}
+
+
+static int nl80211_nan_cancel_publish(void *priv, int publish_id)
+{
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	struct nl_msg *msg;
+	struct nlattr *container;
+	int ret;
+
+	wpa_printf(MSG_DEBUG, "nl80211: NAN USD cancel publish");
+
+	msg = nl80211_drv_msg(drv, 0, NL80211_CMD_VENDOR);
+	if (!msg ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, OUI_QCA) ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_SUBCMD,
+			QCA_NL80211_VENDOR_SUBCMD_USD))
+		goto fail;
+
+	container = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+	if (!container)
+		goto fail;
+
+	if (nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_OP_TYPE,
+		       QCA_WLAN_VENDOR_USD_OP_TYPE_CANCEL_PUBLISH) ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_INSTANCE_ID,
+		       publish_id))
+		goto fail;
+
+	nla_nest_end(msg, container);
+
+	ret = send_and_recv_msgs(drv, msg, NULL, NULL, NULL, NULL);
+	if (ret)
+		wpa_printf(MSG_ERROR,
+			   "nl80211: Failed to send NAN USD cancel publish");
+	return ret;
+
+fail:
+	nlmsg_free(msg);
+	return -1;
+}
+
+
+static int nl80211_nan_update_publish(void *priv, int publish_id,
+				      const struct wpabuf *ssi)
+{
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	struct nl_msg *msg;
+	struct nlattr *container;
+	int ret;
+
+	wpa_printf(MSG_DEBUG, "nl80211: NAN USD update publish: id=%d",
+		   publish_id);
+
+	msg = nl80211_drv_msg(drv, 0, NL80211_CMD_VENDOR);
+	if (!msg ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, OUI_QCA) ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_SUBCMD,
+			QCA_NL80211_VENDOR_SUBCMD_USD))
+		goto fail;
+
+	container = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+	if (!container)
+		goto fail;
+
+	if (nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_OP_TYPE,
+		       QCA_WLAN_VENDOR_USD_OP_TYPE_UPDATE_PUBLISH) ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_INSTANCE_ID,
+		       publish_id) ||
+	    (ssi && nla_put(msg, QCA_WLAN_VENDOR_ATTR_USD_SSI,
+			    wpabuf_len(ssi), wpabuf_head(ssi))))
+		goto fail;
+
+	nla_nest_end(msg, container);
+	ret = send_and_recv_msgs(drv, msg, NULL, NULL, NULL, NULL);
+	if (ret)
+		wpa_printf(MSG_ERROR,
+			   "nl80211: Failed to send NAN USD update publish");
+	return ret;
+
+fail:
+	nlmsg_free(msg);
+	return -1;
+}
+
+
+static int nl80211_nan_subscribe(void *priv, const u8 *src, int subscribe_id,
+				 const char *service_name, const u8 *service_id,
+				 enum nan_service_protocol_type srv_proto_type,
+				 const struct wpabuf *ssi,
+				 const struct wpabuf *elems,
+				 struct nan_subscribe_params *params)
+{
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	struct nl_msg *msg;
+	struct nlattr *container, *attr;
+	int ret;
+
+	wpa_printf(MSG_DEBUG,
+		   "nl80211: Start NAN USD subscribe: freq=%u, ttl=%u",
+		   params->freq, params->ttl);
+	wpa_hexdump_buf(MSG_MSGDUMP, "nl80211: USD elements", elems);
+
+	msg = nl80211_drv_msg(drv, 0, NL80211_CMD_VENDOR);
+	if (!msg ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, OUI_QCA) ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_SUBCMD,
+			QCA_NL80211_VENDOR_SUBCMD_USD))
+		goto fail;
+
+	container = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+	if (!container)
+		goto fail;
+
+	if (nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_OP_TYPE,
+		       QCA_WLAN_VENDOR_USD_OP_TYPE_SUBSCRIBE) ||
+	    nla_put(msg, QCA_WLAN_VENDOR_ATTR_USD_SRC_ADDR, ETH_ALEN, src) ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_INSTANCE_ID,
+		       subscribe_id) ||
+	    nla_put(msg, QCA_WLAN_VENDOR_ATTR_USD_SERVICE_ID,
+		    NAN_SERVICE_ID_LEN, service_id) ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_SERVICE_PROTOCOL_TYPE,
+		       srv_proto_type) ||
+	    nla_put_u16(msg, QCA_WLAN_VENDOR_ATTR_USD_TTL, params->ttl) ||
+	    nla_put(msg, QCA_WLAN_VENDOR_ATTR_USD_ELEMENT_CONTAINER,
+		    wpabuf_len(elems), wpabuf_head(elems)) ||
+	    (ssi && nla_put(msg, QCA_WLAN_VENDOR_ATTR_USD_SSI,
+			    wpabuf_len(ssi), wpabuf_head(ssi))))
+		goto fail;
+
+	attr = nla_nest_start(msg, QCA_WLAN_VENDOR_ATTR_USD_CHAN_CONFIG);
+	if (!attr ||
+	    nla_put_u32(msg, QCA_WLAN_VENDOR_ATTR_USD_CHAN_CONFIG_DEFAULT_FREQ,
+			params->freq) ||
+	    add_freq_list(msg, QCA_WLAN_VENDOR_ATTR_USD_CHAN_CONFIG_FREQ_LIST,
+			  params->freq_list))
+		goto fail;
+	nla_nest_end(msg, attr);
+
+	nla_nest_end(msg, container);
+	ret = send_and_recv_msgs(drv, msg, NULL, NULL, NULL, NULL);
+	if (ret)
+		wpa_printf(MSG_ERROR,
+			   "nl80211: Failed to send NAN USD subscribe");
+	return ret;
+
+fail:
+	nlmsg_free(msg);
+	return -1;
+}
+
+
+static int nl80211_nan_cancel_subscribe(void *priv, int subscribe_id)
+{
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	struct nl_msg *msg;
+	struct nlattr *container;
+	int ret;
+
+	wpa_printf(MSG_DEBUG, "nl80211: NAN USD cancel subscribe");
+
+	msg = nl80211_drv_msg(drv, 0, NL80211_CMD_VENDOR);
+	if (!msg ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, OUI_QCA) ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_SUBCMD,
+			QCA_NL80211_VENDOR_SUBCMD_USD))
+		goto fail;
+
+	container = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
+	if (!container ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_OP_TYPE,
+		       QCA_WLAN_VENDOR_USD_OP_TYPE_CANCEL_SUBSCRIBE) ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_USD_INSTANCE_ID,
+		       subscribe_id))
+		goto fail;
+
+	nla_nest_end(msg, container);
+
+	ret = send_and_recv_msgs(drv, msg, NULL, NULL, NULL, NULL);
+	if (ret)
+		wpa_printf(MSG_ERROR,
+			   "nl80211: Failed to send NAN USD cancel subscribe");
+	return ret;
+
+fail:
+	nlmsg_free(msg);
+	return -1;
+}
+
+#endif /* CONFIG_NAN_USD */
+
 #endif /* CONFIG_DRIVER_NL80211_QCA */
 
 static int nl80211_do_acs(void *priv, struct drv_acs_params *params)
@@ -14087,6 +14406,14 @@ const struct wpa_driver_ops wpa_driver_nl80211_ops = {
 	.send_pasn_resp = nl80211_send_pasn_resp,
 	.set_secure_ranging_ctx = nl80211_set_secure_ranging_ctx,
 #endif /* CONFIG_PASN */
+#ifdef CONFIG_NAN_USD
+	.nan_flush = nl80211_nan_flush,
+	.nan_publish = nl80211_nan_publish,
+	.nan_cancel_publish = nl80211_nan_cancel_publish,
+	.nan_update_publish = nl80211_nan_update_publish,
+	.nan_subscribe = nl80211_nan_subscribe,
+	.nan_cancel_subscribe = nl80211_nan_cancel_subscribe,
+#endif /* CONFIG_NAN_USD */
 #endif /* CONFIG_DRIVER_NL80211_QCA */
 	.do_acs = nl80211_do_acs,
 	.configure_data_frame_filters = nl80211_configure_data_frame_filters,

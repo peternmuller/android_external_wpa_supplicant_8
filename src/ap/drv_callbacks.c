@@ -18,6 +18,7 @@
 #include "common/dpp.h"
 #include "common/sae.h"
 #include "common/hw_features_common.h"
+#include "common/nan_de.h"
 #include "crypto/random.h"
 #include "p2p/p2p.h"
 #include "wps/wps.h"
@@ -42,6 +43,7 @@
 #include "dpp_hostapd.h"
 #include "fils_hlp.h"
 #include "neighbor_db.h"
+#include "nan_usd_ap.h"
 
 
 #ifdef CONFIG_FILS
@@ -279,7 +281,7 @@ int hostapd_notif_assoc(struct hostapd_data *hapd, const u8 *addr,
 
 	if (is_multicast_ether_addr(addr) ||
 	    is_zero_ether_addr(addr) ||
-	    os_memcmp(addr, hapd->own_addr, ETH_ALEN) == 0) {
+	    ether_addr_equal(addr, hapd->own_addr)) {
 		/* Do not process any frames with unexpected/invalid SA so that
 		 * we do not add any state for unexpected STA addresses or end
 		 * up sending out frames to unexpected destination. */
@@ -1591,6 +1593,23 @@ static void hostapd_action_rx(struct hostapd_data *hapd,
 		return;
 	}
 #endif /* CONFIG_DPP */
+#ifdef CONFIG_NAN_USD
+	if (mgmt->u.action.category == WLAN_ACTION_PUBLIC && plen >= 5 &&
+	    mgmt->u.action.u.vs_public_action.action ==
+	    WLAN_PA_VENDOR_SPECIFIC &&
+	    WPA_GET_BE24(mgmt->u.action.u.vs_public_action.oui) ==
+	    OUI_WFA &&
+	    mgmt->u.action.u.vs_public_action.variable[0] == NAN_OUI_TYPE) {
+		const u8 *pos, *end;
+
+		pos = mgmt->u.action.u.vs_public_action.variable;
+		end = drv_mgmt->frame + drv_mgmt->frame_len;
+		pos++;
+		hostapd_nan_usd_rx_sdf(hapd, mgmt->sa, mgmt->bssid,
+				       drv_mgmt->freq, pos, end - pos);
+		return;
+	}
+#endif /* CONFIG_NAN_USD */
 }
 #endif /* NEED_AP_MLME */
 
@@ -1626,9 +1645,14 @@ static struct hostapd_data * get_hapd_bssid(struct hostapd_iface *iface,
 	if (bssid[0] == 0xff && bssid[1] == 0xff && bssid[2] == 0xff &&
 	    bssid[3] == 0xff && bssid[4] == 0xff && bssid[5] == 0xff)
 		return HAPD_BROADCAST;
+#ifdef CONFIG_NAN_USD
+	if (nan_de_is_nan_network_id(bssid))
+		return HAPD_BROADCAST; /* Process NAN Network ID like broadcast
+					*/
+#endif /* CONFIG_NAN_USD */
 
 	for (i = 0; i < iface->num_bss; i++) {
-		if (os_memcmp(bssid, iface->bss[i]->own_addr, ETH_ALEN) == 0)
+		if (ether_addr_equal(bssid, iface->bss[i]->own_addr))
 			return iface->bss[i];
 	}
 
@@ -1682,7 +1706,7 @@ static int hostapd_mgmt_rx(struct hostapd_data *hapd, struct rx_mgmt *rx_mgmt)
 
 #ifdef CONFIG_IEEE80211BE
 	if (hapd->conf->mld_ap &&
-	    os_memcmp(hapd->mld_addr, bssid, ETH_ALEN) == 0)
+	    ether_addr_equal(hapd->mld_addr, bssid))
 		is_mld = true;
 #endif /* CONFIG_IEEE80211BE */
 
@@ -1754,8 +1778,7 @@ static void hostapd_mgmt_tx_cb(struct hostapd_data *hapd, const u8 *buf,
 		hapd = tmp_hapd;
 #ifdef CONFIG_IEEE80211BE
 	} else if (hapd->conf->mld_ap &&
-		   os_memcmp(hapd->mld_addr, get_hdr_bssid(hdr, len),
-			     ETH_ALEN) == 0) {
+		   ether_addr_equal(hapd->mld_addr, get_hdr_bssid(hdr, len))) {
 		/* AP MLD address match - use hapd pointer as-is */
 #endif /* CONFIG_IEEE80211BE */
 	} else {
