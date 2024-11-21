@@ -2089,9 +2089,9 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 		    (ssid->sae_password || ssid->passphrase || ssid->ext_psk))
 			psk_set = 1;
 
-		if (!psk_set) {
+		if (!psk_set && !ssid->pmk_valid) {
 			wpa_msg(wpa_s, MSG_INFO,
-				"No PSK available for association");
+				"No PSK/PMK available for association");
 			wpas_auth_failed(wpa_s, "NO_PSK_AVAILABLE", NULL);
 			return -1;
 		}
@@ -2217,6 +2217,8 @@ static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx,
 		if (!wpa_s->disable_fils)
 			*pos |= 0x01;
 #endif /* CONFIG_FILS */
+		if (wpa_s->conf->twt_requester)
+			*pos |= 0x20; /* Bit 77 - TWT Requester Support */
 		break;
 	case 10: /* Bits 80-87 */
 #ifdef CONFIG_TESTING_OPTIONS
@@ -2401,6 +2403,8 @@ int wpas_update_random_addr(struct wpa_supplicant *wpa_s,
 		return -1;
 	}
 
+	wpas_p2p_update_dev_addr(wpa_s);
+
 	wpa_msg(wpa_s, MSG_DEBUG, "Using random MAC address " MACSTR,
 		MAC2STR(addr));
 
@@ -2491,6 +2495,9 @@ int wpas_restore_permanent_mac_addr(struct wpa_supplicant *wpa_s)
 			"Could not update MAC address information");
 		return -1;
 	}
+
+	wpas_p2p_update_dev_addr(wpa_s);
+
 	wpa_msg(wpa_s, MSG_DEBUG, "Using permanent MAC address");
 	return 0;
 }
@@ -8691,7 +8698,8 @@ int wpas_network_disabled(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid)
 
 	if (wpa_key_mgmt_wpa_psk(ssid->key_mgmt) && !ssid->psk_set &&
 	    (!ssid->passphrase || ssid->ssid_len != 0) && !ssid->ext_psk &&
-	    !(wpa_key_mgmt_sae(ssid->key_mgmt) && ssid->sae_password) &&
+	    !(wpa_key_mgmt_sae(ssid->key_mgmt) &&
+	      (ssid->sae_password || ssid->pmk_valid)) &&
 	    !ssid->mem_only_psk)
 		return 1;
 
