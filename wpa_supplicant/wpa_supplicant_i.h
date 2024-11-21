@@ -1143,6 +1143,7 @@ struct wpa_supplicant {
 	u8 pending_join_dev_addr[ETH_ALEN];
 	u8 p2p_bootstrap_dev_addr[ETH_ALEN];
 	int pending_join_wps_method;
+	char pending_join_password[100];
 	u8 p2p_join_ssid[SSID_MAX_LEN];
 	size_t p2p_join_ssid_len;
 	int p2p_join_scan_count;
@@ -1600,6 +1601,9 @@ struct wpa_supplicant {
 	struct wpa_radio_work *pasn_auth_work;
 	unsigned int pasn_count;
 	struct pasn_auth *pasn_params;
+#ifdef CONFIG_P2P
+	struct wpa_radio_work *p2p_pasn_auth_work;
+#endif /* CONFIG_P2P */
 #endif /* CONFIG_PASN */
 	struct scs_robust_av_data scs_robust_av_req;
 	u8 scs_dialog_token;
