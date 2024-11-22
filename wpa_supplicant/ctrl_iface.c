@@ -7748,6 +7748,8 @@ static void p2p_ctrl_flush(struct wpa_supplicant *wpa_s)
 	wpa_s->parent->p2ps_method_config_any = 0;
 	if (wpa_s->global->p2p)
 		p2p_flush(wpa_s->global->p2p);
+
+	wpa_s->p2p2 = false;
 }
 
 
@@ -7834,6 +7836,26 @@ static int p2p_ctrl_iface_p2p_lo_start(struct wpa_supplicant *wpa_s, char *cmd)
 	return wpas_p2p_lo_start(wpa_s, freq, period, interval, count);
 }
 
+
+#ifdef CONFIG_TESTING_OPTIONS
+static int p2p_ctrl_pmk_get(struct wpa_supplicant *wpa_s, char *buf,
+			    size_t buflen)
+{
+	const u8 *pmk;
+	size_t pmk_len;
+
+	/* Return the PMK from the first identity entry. This assumes test
+	 * cases to remove all indentities at the beginning so that only one
+	 * entry is available. */
+	if (!wpa_s->conf->identity || !wpa_s->conf->identity->pmk)
+		return -1;
+
+	pmk_len = wpabuf_len(wpa_s->conf->identity->pmk);
+	pmk = wpabuf_head(wpa_s->conf->identity->pmk);
+
+	return wpa_snprintf_hex(buf, buflen, pmk, pmk_len);
+}
+#endif /* CONFIG_TESTING_OPTIONS */
 #endif /* CONFIG_P2P */
 
 
@@ -10898,6 +10920,24 @@ static void wpas_ctrl_iface_pmksa_flush(struct wpa_supplicant *wpa_s)
 #endif /* CONFIG_AP */
 }
 
+#ifdef CONFIG_P2P
+#ifdef CONFIG_PASN
+
+#ifdef CONFIG_TESTING_OPTIONS
+static int p2p_ctrl_get_pasn_ptk(struct wpa_supplicant *wpa_s, char *buf,
+				 size_t buflen)
+{
+	const u8 *ptk;
+	size_t ptk_len;
+
+	if (wpas_p2p_get_pasn_ptk(wpa_s, &ptk, &ptk_len))
+		return -1;
+	return wpa_snprintf_hex(buf, buflen, ptk, ptk_len);
+}
+#endif /* CONFIG_TESTING_OPTIONS */
+
+#endif /* CONFIG_PASN */
+#endif /* CONFIG_P2P */
 
 #ifdef CONFIG_PMKSA_CACHE_EXTERNAL
 
@@ -12868,6 +12908,12 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 			reply_len = -1;
 	} else if (os_strcmp(buf, "P2P_GET_PASSPHRASE") == 0) {
 		reply_len = p2p_get_passphrase(wpa_s, reply, reply_size);
+#ifdef CONFIG_PASN
+#ifdef CONFIG_TESTING_OPTIONS
+	} else if (os_strcmp(buf, "P2P_GET_PASNPTK") == 0) {
+		reply_len = p2p_ctrl_get_pasn_ptk(wpa_s, reply, reply_size);
+#endif /* CONFIG_TESTING_OPTIONS */
+#endif /* CONFIG_PASN */
 	} else if (os_strncmp(buf, "P2P_SERV_DISC_REQ ", 18) == 0) {
 		reply_len = p2p_ctrl_serv_disc_req(wpa_s, buf + 18, reply,
 						   reply_size);
@@ -12934,6 +12980,13 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 	} else if (os_strcmp(buf, "P2P_LO_STOP") == 0) {
 		if (wpas_p2p_lo_stop(wpa_s))
 			reply_len = -1;
+	} else if (os_strcmp(buf, "P2P_REMOVE_IDENTITY") == 0) {
+		if (wpas_p2p_remove_all_identity(wpa_s))
+			reply_len = -1;
+#ifdef CONFIG_TESTING_OPTIONS
+	} else if (os_strncmp(buf, "P2P_PMK_GET", 12) == 0) {
+		reply_len = p2p_ctrl_pmk_get(wpa_s, reply, reply_size);
+#endif /* CONFIG_TESTING_OPTIONS */
 #endif /* CONFIG_P2P */
 #ifdef CONFIG_WIFI_DISPLAY
 	} else if (os_strncmp(buf, "WFD_SUBELEM_SET ", 16) == 0) {
