@@ -5193,6 +5193,28 @@ int p2p_get_dev_addr(struct p2p_data *p2p, const u8 *iface_addr,
 }
 
 
+int p2p_get_dev_identity_key(struct p2p_data *p2p, const u8 *dev_addr,
+			     const u8 **dik_data, size_t *dik_len, u8 *cipher)
+{
+	if (!p2p || !p2p->peer_dik_len) {
+		wpa_printf(MSG_DEBUG,
+			   "P2P2: Failed to get device identity key for "
+			   MACSTR, MAC2STR(dev_addr));
+		return -1;
+	}
+
+	*dik_data = p2p->peer_dik_data;
+	*dik_len = p2p->peer_dik_len;
+	*cipher = p2p->dik_cipher_version;
+
+	/* Reset DIK length to invalidate DIK for successive iteration of a new
+	 * peer. */
+	p2p->peer_dik_len = 0;
+
+	return 0;
+}
+
+
 void p2p_set_peer_filter(struct p2p_data *p2p, const u8 *addr)
 {
 	os_memcpy(p2p->peer_filter, addr, ETH_ALEN);
@@ -6597,7 +6619,8 @@ static int p2p_pasn_handle_action_wrapper(struct p2p_data *p2p,
 
 			resp = p2p_process_invitation_req(p2p, mgmt->sa,
 							  data + 1,
-							  data_len - 1, freq);
+							  data_len - 1, freq,
+							  true);
 			if (!resp)
 				p2p_dbg(p2p, "No Invitation Response found");
 
@@ -6977,6 +7000,9 @@ static int p2p_handle_pasn_auth(struct p2p_data *p2p, struct p2p_device *dev,
 				"PASN Responder: Handle Auth 3 failed");
 			return -1;
 		}
+#ifdef CONFIG_TESTING_OPTIONS
+		p2p_pasn_store_ptk(p2p, &pasn->ptk);
+#endif /* CONFIG_TESTING_OPTIONS */
 		if (p2p_pasn_handle_action_wrapper(p2p, dev, mgmt, len, freq,
 						   auth_transaction)) {
 			p2p_dbg(p2p,
@@ -7033,12 +7059,14 @@ int p2p_pasn_auth_rx(struct p2p_data *p2p, const struct ieee80211_mgmt *mgmt,
 		}
 		ret = wpa_pasn_auth_rx(pasn, (const u8 *) mgmt, len,
 				       &pasn_data);
-		forced_memzero(pasn_get_ptk(pasn), sizeof(pasn->ptk));
-
 		if (ret < 0) {
 			p2p_dbg(p2p, "PASN: wpa_pasn_auth_rx() failed");
 			dev->role = P2P_ROLE_IDLE;
 		}
+#ifdef CONFIG_TESTING_OPTIONS
+		p2p_pasn_store_ptk(p2p, &pasn->ptk);
+#endif /* CONFIG_TESTING_OPTIONS */
+		forced_memzero(pasn_get_ptk(pasn), sizeof(pasn->ptk));
 	} else {
 		ret = p2p_handle_pasn_auth(p2p, dev, mgmt, len, freq);
 	}
@@ -7054,5 +7082,50 @@ void p2p_pasn_pmksa_set_pmk(struct p2p_data *p2p, const u8 *src, const u8 *dst,
 	pasn_responder_pmksa_cache_add(p2p->responder_pmksa, src, dst, pmk,
 				       pmk_len, pmkid);
 }
+
+
+#ifdef CONFIG_TESTING_OPTIONS
+
+void p2p_pasn_store_ptk(struct p2p_data *p2p, struct wpa_ptk *ptk)
+{
+	u8 *pos;
+
+	if (ptk->ptk_len > sizeof(p2p->pasn_ptk)) {
+		p2p_dbg(p2p, "P2P PASN PTK exceeds: (len=%ld)", ptk->ptk_len);
+		return;
+	}
+
+	pos = p2p->pasn_ptk;
+	p2p->pasn_ptk_len = ptk->ptk_len;
+	if (ptk->kck_len) {
+		os_memcpy(pos, ptk->kck, ptk->kck_len);
+		pos += ptk->kck_len;
+	}
+	if (ptk->kek_len) {
+		os_memcpy(pos, ptk->kek, ptk->kek_len);
+		pos += ptk->kek_len;
+	}
+	if (ptk->tk_len) {
+		os_memcpy(pos, ptk->tk, ptk->tk_len);
+		pos += ptk->tk_len;
+	}
+	if (ptk->kdk_len) {
+		os_memcpy(pos, ptk->kdk, ptk->kdk_len);
+		pos += ptk->kdk_len;
+	}
+}
+
+
+int p2p_pasn_get_ptk(struct p2p_data *p2p, const u8 **buf, size_t *buf_len)
+{
+	if (!p2p || !p2p->pasn_ptk_len)
+		return -1;
+
+	*buf_len = p2p->pasn_ptk_len;
+	*buf = p2p->pasn_ptk;
+	return 0;
+}
+
+#endif /* CONFIG_TESTING_OPTIONS */
 
 #endif /* CONFIG_PASN */

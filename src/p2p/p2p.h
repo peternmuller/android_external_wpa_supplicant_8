@@ -1082,6 +1082,8 @@ struct p2p_config {
 	 * @channels: Available operating channels for the group
 	 * @dev_pw_id: Device Password ID for NFC static handover or -1 if not
 	 *	used
+	 * @p2p2: Whether invitation request was wrapped in PASN authentication
+	 * received from a P2P2 device
 	 * Returns: Status code (P2P_SC_*)
 	 *
 	 * This optional callback can be used to implement persistent reconnect
@@ -1104,7 +1106,7 @@ struct p2p_config {
 				 size_t ssid_len, int *go, u8 *group_bssid,
 				 int *force_freq, int persistent_group,
 				 const struct p2p_channels *channels,
-				 int dev_pw_id);
+				 int dev_pw_id, bool p2p2);
 
 	/**
 	 * invitation_received - Callback on Invitation Request RX
@@ -2324,6 +2326,8 @@ int p2p_get_interface_addr(struct p2p_data *p2p, const u8 *dev_addr,
 			   u8 *iface_addr);
 int p2p_get_dev_addr(struct p2p_data *p2p, const u8 *iface_addr,
 			   u8 *dev_addr);
+int p2p_get_dev_identity_key(struct p2p_data *p2p, const u8 *dev_addr,
+			     const u8 **dik_data, size_t *dik_len, u8 *cipher);
 
 void p2p_set_peer_filter(struct p2p_data *p2p, const u8 *addr);
 
@@ -2735,5 +2739,8 @@ int p2p_pasn_auth_tx_status(struct p2p_data *p2p, const u8 *data,
 int p2p_config_sae_password(struct p2p_data *p2p, const char *pw);
 void p2p_pasn_pmksa_set_pmk(struct p2p_data *p2p, const u8 *src, const u8 *dst,
 			    const u8 *pmk, size_t pmk_len, const u8 *pmkid);
+void p2p_set_store_pasn_ptk(struct p2p_data *p2p, u8 val);
+void p2p_pasn_store_ptk(struct p2p_data *p2p, struct wpa_ptk *ptk);
+int p2p_pasn_get_ptk(struct p2p_data *p2p, const u8 **buf, size_t *buf_len);
 
 #endif /* P2P_H */
