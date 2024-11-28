@@ -543,6 +543,8 @@ static inline int is_multicast_ether_addr(const u8 *a)
 	return a[0] & 0x01;
 }
 
+#include <stdbool.h>
+
 static inline bool ether_addr_equal(const u8 *a, const u8 *b)
 {
 	return os_memcmp(a, b, ETH_ALEN) == 0;
