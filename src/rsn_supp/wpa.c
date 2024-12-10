@@ -737,7 +737,7 @@ static size_t wpa_mlo_link_kde_len(struct wpa_sm *sm)
 	int i;
 	unsigned int num_links = 0;
 
-	for (i = 0; i < MAX_NUM_MLO_LINKS; i++) {
+	for (i = 0; i < MAX_NUM_MLD_LINKS; i++) {
 		if (sm->mlo.assoc_link_id != i && (sm->mlo.req_links & BIT(i)))
 			num_links++;
 	}
@@ -751,7 +751,7 @@ static u8 * wpa_mlo_link_kde(struct wpa_sm *sm, u8 *pos)
 	int i;
 	u8 hdr[1 + ETH_ALEN];
 
-	for (i = 0; i < MAX_NUM_MLO_LINKS; i++) {
+	for (i = 0; i < MAX_NUM_MLD_LINKS; i++) {
 		if (sm->mlo.assoc_link_id == i || !(sm->mlo.req_links & BIT(i)))
 			continue;
 
@@ -1497,7 +1497,7 @@ static int wpa_supplicant_pairwise_mlo_gtk(struct wpa_sm *sm,
 {
 	u8 i;
 
-	for (i = 0; i < MAX_NUM_MLO_LINKS; i++) {
+	for (i = 0; i < MAX_NUM_MLD_LINKS; i++) {
 		if (!(sm->mlo.valid_links & BIT(i)))
 			continue;
 
@@ -1849,7 +1849,7 @@ static int mlo_ieee80211w_set_keys(struct wpa_sm *sm,
 	    sm->mgmt_group_cipher == WPA_CIPHER_GTK_NOT_USED)
 		return 0;
 
-	for (i = 0; i < MAX_NUM_MLO_LINKS; i++) {
+	for (i = 0; i < MAX_NUM_MLD_LINKS; i++) {
 		if (!(sm->mlo.valid_links & BIT(i)))
 			continue;
 
@@ -2819,7 +2819,7 @@ static void wpa_supplicant_process_mlo_1_of_2(struct wpa_sm *sm,
 		wpa_msg(sm->ctx->msg_ctx, MSG_INFO,
 			"MLO RSN: Failed to configure MLO IGTK");
 
-	for (i = 0; i < MAX_NUM_MLO_LINKS; i++) {
+	for (i = 0; i < MAX_NUM_MLD_LINKS; i++) {
 		if (!(sm->mlo.valid_links & BIT(i)))
 			continue;
 
@@ -5027,6 +5027,25 @@ struct rsn_pmksa_cache_entry * wpa_sm_pmksa_cache_get(struct wpa_sm *sm,
 {
 	return pmksa_cache_get(sm->pmksa, aa, sm->own_addr, pmkid, network_ctx,
 			       akmp);
+}
+
+
+int wpa_sm_pmksa_get_pmk(struct wpa_sm *sm, const u8 *aa, const u8 **pmk,
+			 size_t *pmk_len, const u8 **pmkid)
+{
+	struct rsn_pmksa_cache_entry *pmksa;
+
+	pmksa = wpa_sm_pmksa_cache_get(sm, aa, NULL, NULL, 0);
+	if (!pmksa) {
+		wpa_printf(MSG_DEBUG, "RSN: Failed to get PMKSA for " MACSTR,
+			   MAC2STR(aa));
+		return -1;
+	}
+
+	*pmk = pmksa->pmk;
+	*pmk_len = pmksa->pmk_len;
+	*pmkid = pmksa->pmkid;
+	return 0;
 }
 
 

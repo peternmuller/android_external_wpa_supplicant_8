@@ -2427,6 +2427,8 @@ static void pasn_fils_auth_resp(struct hostapd_data *hapd,
 	fils->erp_resp = erp_resp;
 	ret = handle_auth_pasn_resp(sta->pasn, hapd->own_addr, sta->addr, NULL,
 				    WLAN_STATUS_SUCCESS);
+	wpabuf_free(pasn->frame);
+	pasn->frame = NULL;
 	fils->erp_resp = NULL;
 
 	if (ret) {
@@ -2730,6 +2732,32 @@ static void handle_auth_pasn(struct hostapd_data *hapd, struct sta_info *sta,
 			     const struct ieee80211_mgmt *mgmt, size_t len,
 			     u16 trans_seq, u16 status)
 {
+	int ret;
+#ifdef CONFIG_P2P
+	struct ieee802_11_elems elems;
+
+	if (len < 24) {
+		wpa_printf(MSG_DEBUG, "PASN: Too short Management frame");
+		return;
+	}
+
+	if (ieee802_11_parse_elems(mgmt->u.auth.variable,
+				   len - offsetof(struct ieee80211_mgmt,
+						  u.auth.variable),
+				   &elems, 1) == ParseFailed) {
+		wpa_printf(MSG_DEBUG,
+			   "PASN: Failed parsing Authentication frame");
+		return;
+	}
+
+	if ((hapd->conf->p2p & (P2P_ENABLED | P2P_GROUP_OWNER)) ==
+	    (P2P_ENABLED | P2P_GROUP_OWNER) &&
+	    hapd->p2p && elems.p2p2_ie && elems.p2p2_ie_len) {
+		p2p_pasn_auth_rx(hapd->p2p, mgmt, len, hapd->iface->freq);
+		return;
+	}
+#endif /* CONFIG_P2P */
+
 	if (hapd->conf->wpa != WPA_PROTO_RSN) {
 		wpa_printf(MSG_INFO, "PASN: RSN is not configured");
 		return;
@@ -2761,8 +2789,11 @@ static void handle_auth_pasn(struct hostapd_data *hapd, struct sta_info *sta,
 		hapd_initialize_pasn(hapd, sta);
 
 		hapd_pasn_update_params(hapd, sta, mgmt, len);
-		if (handle_auth_pasn_1(sta->pasn, hapd->own_addr,
-				       sta->addr, mgmt, len, false) < 0)
+		ret = handle_auth_pasn_1(sta->pasn, hapd->own_addr, sta->addr,
+					 mgmt, len, false);
+		wpabuf_free(sta->pasn->frame);
+		sta->pasn->frame = NULL;
+		if (ret < 0)
 			ap_free_sta(hapd, sta);
 	} else if (trans_seq == 3) {
 		if (!sta->pasn) {
@@ -6112,6 +6143,8 @@ int ieee802_11_mgmt(struct hostapd_data *hapd, const u8 *buf, size_t len,
 #ifdef CONFIG_NAN_USD
 	static const u8 nan_network_id[ETH_ALEN] =
 		{ 0x51, 0x6f, 0x9a, 0x01, 0x00, 0x00 };
+	static const u8 p2p_network_id[ETH_ALEN] =
+		{ 0x51, 0x6f, 0x9a, 0x02, 0x00, 0x00 };
 #endif /* CONFIG_NAN_USD */
 
 	if (len < 24)
@@ -6146,6 +6179,7 @@ int ieee802_11_mgmt(struct hostapd_data *hapd, const u8 *buf, size_t len,
 	if (!is_broadcast_ether_addr(mgmt->bssid) &&
 #ifdef CONFIG_NAN_USD
 	    !nan_de_is_nan_network_id(mgmt->bssid) &&
+	    !nan_de_is_p2p_network_id(mgmt->bssid) &&
 #endif /* CONFIG_NAN_USD */
 #ifdef CONFIG_P2P
 	    /* Invitation responses can be sent with the peer MAC as BSSID */
@@ -6184,6 +6218,7 @@ int ieee802_11_mgmt(struct hostapd_data *hapd, const u8 *buf, size_t len,
 #endif /* CONFIG_IEEE80211BE */
 #ifdef CONFIG_NAN_USD
 	    !ether_addr_equal(mgmt->da, nan_network_id) &&
+	    !ether_addr_equal(mgmt->da, p2p_network_id) &&
 #endif /* CONFIG_NAN_USD */
 	    !ether_addr_equal(mgmt->da, hapd->own_addr)) {
 		hostapd_logger(hapd, mgmt->sa, HOSTAPD_MODULE_IEEE80211,

@@ -190,7 +190,8 @@ int joinGroup(
 	if (wpas_p2p_group_add_persistent(
 		wpa_s, wpa_network, 0, 0, freq, 0, ht40, vht,
 		CONF_OPER_CHWIDTH_USE_HT, he, 0, NULL, 0, 0, is6GhzAllowed(wpa_s),
-		P2P_JOIN_LIMIT, isAnyEtherAddr(group_owner_bssid) ? NULL : group_owner_bssid)) {
+		P2P_JOIN_LIMIT, isAnyEtherAddr(group_owner_bssid) ? NULL : group_owner_bssid,
+		NULL, NULL, NULL, 0)) {
 		ret = -1;
 	}
 
@@ -1182,7 +1183,7 @@ ndk::ScopedAStatus P2pIface::reinvokeInternal(
 	}
 	if (wpas_p2p_invite(
 		wpa_s, peer_address.data(), ssid, NULL, 0, 0, ht40, vht,
-		CONF_OPER_CHWIDTH_USE_HT, 0, he, edmg, is6GhzAllowed(wpa_s))) {
+		CONF_OPER_CHWIDTH_USE_HT, 0, he, edmg, is6GhzAllowed(wpa_s), 0)) {
 		return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
 	}
 	return ndk::ScopedAStatus::ok();
@@ -1645,7 +1646,8 @@ ndk::ScopedAStatus P2pIface::addGroupInternal(
 	if (ssid == NULL) {
 		if (wpas_p2p_group_add(
 			wpa_s, persistent, 0, 0, ht40, vht,
-			CONF_OPER_CHWIDTH_USE_HT, he, edmg, is6GhzAllowed(wpa_s))) {
+			CONF_OPER_CHWIDTH_USE_HT, he, edmg, is6GhzAllowed(wpa_s),
+			wpa_s->p2p2)) {
 			return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
 		} else {
 			return ndk::ScopedAStatus::ok();
@@ -1654,7 +1656,8 @@ ndk::ScopedAStatus P2pIface::addGroupInternal(
 		if (wpas_p2p_group_add_persistent(
 			wpa_s, ssid, 0, 0, 0, 0, ht40, vht,
 			CONF_OPER_CHWIDTH_USE_HT, he, edmg, NULL, 0, 0,
-			is6GhzAllowed(wpa_s), 0, NULL)) {
+			is6GhzAllowed(wpa_s), 0, NULL, NULL, NULL,
+			NULL, 0)) {
 			return createStatus(SupplicantStatusCode::FAILURE_NETWORK_UNKNOWN);
 		} else {
 			return ndk::ScopedAStatus::ok();
@@ -1704,7 +1707,8 @@ ndk::ScopedAStatus P2pIface::addGroupWithConfigInternal(
 
 		if (wpas_p2p_group_add(
 			wpa_s, persistent, freq, 0, ht40, vht,
-			CONF_OPER_CHWIDTH_USE_HT, he, edmg, is6GhzAllowed(wpa_s))) {
+			CONF_OPER_CHWIDTH_USE_HT, he, edmg, is6GhzAllowed(wpa_s),
+			wpa_s->p2p2)) {
 			return createStatus(SupplicantStatusCode::FAILURE_UNKNOWN);
 		}
 		return ndk::ScopedAStatus::ok();
